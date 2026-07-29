@@ -1,5 +1,10 @@
 // app.js — Centro de Mando JC
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// La librería de Supabase se sirve DESDE ESTE MISMO SITIO (vendor-supabase.js),
+// no desde esm.sh -- algunas redes/antivirus bloquean CDNs externos como
+// esm.sh y eso dejaba el login "cargando" para siempre sin ningún error
+// visible. Sirviéndola local, solo depende de que GitHub Pages cargue (que
+// ya sabemos que sí) y de tu propio proyecto de Supabase.
+import { createClient } from './vendor-supabase.js';
 import { aplicarTilt } from './bg.js';
 
 const { url, anonKey } = window.SUPABASE_CONFIG;
