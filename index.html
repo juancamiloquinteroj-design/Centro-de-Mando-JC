@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Centro de Mando JC</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<div class="veil"></div>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="vista-login" class="vista">
+    <button id="btn-tema-login" class="btn-tema-flotante" title="Cambiar tema">🌓</button>
+    <div class="login-card" id="login-card" data-tilt>
+        <div class="login-card-inner">
+            <div class="brand">
+                <div class="brand-mark"><span>⚙</span></div>
+                <h1>Centro de Mando</h1>
+                <p>JC &middot; Gestión unificada de aplicaciones</p>
+            </div>
+            <form id="form-login" autocomplete="on">
+                <label class="campo">
+                    <span>Correo de administrador</span>
+                    <input type="email" id="login-email" required autocomplete="username" placeholder="admin@cinco.com">
+                </label>
+                <label class="campo">
+                    <span>Contraseña</span>
+                    <input type="password" id="login-pass" required autocomplete="current-password" placeholder="••••••••">
+                </label>
+                <button type="submit" id="btn-login">
+                    <span class="btn-texto">Ingresar</span>
+                    <span class="btn-spinner"></span>
+                </button>
+                <p class="login-error" id="login-error"></p>
+            </form>
+            <p class="login-footnote">Acceso restringido &middot; solo administradores registrados</p>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== DASHBOARD ==================== -->
+<div id="vista-dashboard" class="vista oculto">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-mark small"><span>⚙</span></div>
+            <div>
+                <h1>Centro de Mando</h1>
+                <p>JC</p>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <button class="nav-item" data-vista="panel"><span class="nav-icono">📊</span> Panel</button>
+            <button class="nav-item" data-vista="usuarios"><span class="nav-icono">👤</span> Usuarios</button>
+            <button class="nav-item" data-vista="cerebro"><span class="nav-icono">🧠</span> Cerebro</button>
+            <button class="nav-item" data-vista="documentos"><span class="nav-icono">📄</span> Documentos</button>
+            <button class="nav-item" data-vista="logs"><span class="nav-icono">🛡️</span> Seguridad</button>
+        </nav>
+        <div class="sidebar-footer">
+            <button id="btn-tema" title="Cambiar tema">🌓 <span>Tema</span></button>
+            <div class="sidebar-user">
+                <span id="admin-email"></span>
+                <button id="btn-logout">Salir</button>
+            </div>
+        </div>
+    </aside>
+
+    <main class="contenido">
+        <header class="topbar">
+            <div>
+                <h2 id="titulo-vista">Panel</h2>
+                <p id="subtitulo-vista">Vista general de la suite</p>
+            </div>
+        </header>
+
+        <!-- ---------- PANEL (resumen) ---------- -->
+        <section id="seccion-panel" class="seccion-vista">
+            <div class="stats" id="stats"></div>
+
+            <div class="graficas-grid">
+                <div class="panel-card" data-tilt-suave>
+                    <h3>Crecimiento de usuarios</h3>
+                    <div id="grafica-crecimiento" class="grafica"></div>
+                </div>
+                <div class="panel-card" data-tilt-suave>
+                    <h3>Accesos por aplicación</h3>
+                    <div id="grafica-apps" class="grafica"></div>
+                </div>
+            </div>
+
+            <div class="panel-card" data-tilt-suave>
+                <div class="panel-card-head">
+                    <h3>Logs de seguridad recientes</h3>
+                    <button class="link-btn" data-vista="logs">Ver todos →</button>
+                </div>
+                <div class="tabla-wrap">
+                    <table id="tabla-logs-mini">
+                        <thead><tr><th>Evento</th><th>Correo</th><th>App</th><th>Cuándo</th></tr></thead>
+                        <tbody id="tbody-logs-mini"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ---------- USUARIOS ---------- -->
+        <section id="seccion-usuarios" class="seccion-vista oculto">
+            <div class="panel-card" data-tilt-suave>
+                <div class="panel-head">
+                    <h2>Usuarios de la suite</h2>
+                    <div class="panel-actions">
+                        <input type="search" id="buscar" placeholder="Buscar por correo…">
+                        <button id="btn-otorgar" class="btn-primario">+ Otorgar acceso</button>
+                    </div>
+                </div>
+                <div class="tabla-wrap">
+                    <table id="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th>Correo</th>
+                                <th>Accesos</th>
+                                <th>Creado</th>
+                                <th>Estado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-usuarios"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="tabla-vacia">No hay usuarios que coincidan.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ---------- CEREBRO ---------- -->
+        <section id="seccion-cerebro" class="seccion-vista oculto">
+            <div class="cerebro-layout">
+                <aside class="conversaciones-panel panel-card" data-tilt-suave>
+                    <button id="btn-nueva-conv" class="btn-primario btn-ancho">+ Nueva conversación</button>
+                    <div id="lista-conversaciones" class="lista-conversaciones"></div>
+                </aside>
+                <div class="chat-panel panel-card" data-tilt-suave>
+                    <div class="chat-mensajes" id="chat-mensajes">
+                        <p class="chat-vacio">Preguntá algo sobre los documentos que hayas cargado. El cerebro
+                            responde solo con base en ellos, citando capítulo o artículo cuando aplique.</p>
+                    </div>
+                    <form id="form-chat" class="chat-form">
+                        <textarea id="chat-input" rows="2" placeholder="Ej: ¿Qué dice la resolución sobre niveles de tensión?"></textarea>
+                        <button type="submit" class="btn-primario" id="btn-chat">
+                            <span class="btn-texto">Preguntar</span>
+                            <span class="btn-spinner"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- ---------- DOCUMENTOS ---------- -->
+        <section id="seccion-documentos" class="seccion-vista oculto">
+            <div class="panel-card" data-tilt-suave>
+                <div class="panel-head">
+                    <h2>Documentos del cerebro</h2>
+                    <div class="panel-actions">
+                        <button id="btn-subir-doc" class="btn-primario">+ Subir documento (PDF)</button>
+                    </div>
+                </div>
+                <p class="nota-panel">El cerebro solo responde con base en lo que subas acá: resoluciones,
+                    libros, procedimientos. Formato PDF.</p>
+                <div class="tabla-wrap">
+                    <table id="tabla-documentos">
+                        <thead><tr><th>Título</th><th>Categoría</th><th>Subido</th><th></th></tr></thead>
+                        <tbody id="tbody-documentos"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="documentos-vacio">Todavía no has subido documentos.</p>
+                </div>
+                <input type="file" id="input-pdf" accept="application/pdf" class="oculto">
+            </div>
+        </section>
+
+        <!-- ---------- SEGURIDAD (logs completos) ---------- -->
+        <section id="seccion-logs" class="seccion-vista oculto">
+            <div class="panel-card" data-tilt-suave>
+                <div class="panel-head">
+                    <h2>Logs de seguridad</h2>
+                    <div class="panel-actions">
+                        <select id="filtro-logs">
+                            <option value="">Todos los eventos</option>
+                            <option value="login_ok">Login exitoso</option>
+                            <option value="login_fallido">Login fallido</option>
+                            <option value="bloqueo">Bloqueos</option>
+                            <option value="desbloqueo">Desbloqueos</option>
+                            <option value="borrado">Usuarios borrados</option>
+                            <option value="acceso_otorgado">Accesos otorgados</option>
+                            <option value="acceso_revocado">Accesos revocados</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="tabla-wrap">
+                    <table id="tabla-logs">
+                        <thead><tr><th>Evento</th><th>Correo</th><th>App</th><th>Detalle</th><th>Cuándo</th></tr></thead>
+                        <tbody id="tbody-logs"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="logs-vacio">No hay eventos que coincidan.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- ==================== MODAL: otorgar acceso ==================== -->
+<div id="modal-otorgar" class="modal oculto">
+    <div class="modal-card">
+        <h3>Otorgar acceso a una app</h3>
+        <label class="campo">
+            <span>Correo del usuario (ya debe tener cuenta creada desde alguna app)</span>
+            <input type="email" id="ot-correo" placeholder="nombre@empresa.com">
+        </label>
+        <label class="campo">
+            <span>App</span>
+            <select id="ot-app"></select>
+        </label>
+        <label class="campo">
+            <span>Vigencia</span>
+            <select id="ot-vigencia">
+                <option value="">Sin vencimiento</option>
+                <option value="1">1 mes</option>
+                <option value="3">3 meses</option>
+                <option value="6">6 meses</option>
+                <option value="12">1 año</option>
+            </select>
+        </label>
+        <div class="modal-actions">
+            <button id="ot-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="ot-confirmar" class="btn-primario">Otorgar</button>
+        </div>
+        <p class="modal-msg" id="ot-msg"></p>
+    </div>
+</div>
+
+<!-- ==================== MODAL: editar vigencia ==================== -->
+<div id="modal-vigencia" class="modal oculto">
+    <div class="modal-card">
+        <h3>Vigencia del acceso</h3>
+        <p class="modal-sub" id="vig-titulo"></p>
+        <label class="campo">
+            <span>Nueva vigencia (desde hoy)</span>
+            <select id="vig-nueva">
+                <option value="quitar">Quitar vencimiento (dejar indefinido)</option>
+                <option value="1">Extender 1 mes</option>
+                <option value="3">Extender 3 meses</option>
+                <option value="6">Extender 6 meses</option>
+                <option value="12">Extender 1 año</option>
+            </select>
+        </label>
+        <div class="modal-actions">
+            <button id="vig-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="vig-confirmar" class="btn-primario">Guardar</button>
+        </div>
+        <p class="modal-msg" id="vig-msg"></p>
+    </div>
+</div>
+
+<!-- ==================== MODAL: subir documento ==================== -->
+<div id="modal-doc" class="modal oculto">
+    <div class="modal-card">
+        <h3>Subir documento</h3>
+        <label class="campo">
+            <span>Título</span>
+            <input type="text" id="doc-titulo" placeholder="Ej: Resolución CREG 015 de 2018">
+        </label>
+        <label class="campo">
+            <span>Categoría</span>
+            <input type="text" id="doc-categoria" placeholder="Ej: CREG">
+        </label>
+        <p class="modal-sub" id="doc-archivo-nombre">Ningún archivo seleccionado.</p>
+        <div class="modal-actions">
+            <button id="doc-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="doc-confirmar" class="btn-primario">Subir</button>
+        </div>
+        <p class="modal-msg" id="doc-msg"></p>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="config.js"></script>
+<script type="module" src="bg.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
