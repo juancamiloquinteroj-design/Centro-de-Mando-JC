@@ -53,6 +53,7 @@
         </div>
         <nav class="sidebar-nav">
             <button class="nav-item" data-vista="panel"><span class="nav-icono">📊</span> Panel</button>
+            <button class="nav-item" data-vista="aplicaciones"><span class="nav-icono">🧩</span> Aplicaciones</button>
             <button class="nav-item" data-vista="usuarios"><span class="nav-icono">👤</span> Usuarios</button>
             <button class="nav-item" data-vista="cerebro"><span class="nav-icono">🧠</span> Cerebro</button>
             <button class="nav-item" data-vista="documentos"><span class="nav-icono">📄</span> Documentos</button>
@@ -105,16 +106,29 @@
             </div>
         </section>
 
+        <!-- ---------- APLICACIONES ---------- -->
+        <section id="seccion-aplicaciones" class="seccion-vista oculto">
+            <div class="panel-head">
+                <h2>Aplicaciones de la suite</h2>
+                <div class="panel-actions">
+                    <button id="btn-registrar-app" class="btn-primario">+ Registrar aplicación</button>
+                </div>
+            </div>
+            <div class="apps-grid" id="apps-grid"></div>
+        </section>
+
         <!-- ---------- USUARIOS ---------- -->
         <section id="seccion-usuarios" class="seccion-vista oculto">
             <div class="panel-card" data-tilt-suave>
                 <div class="panel-head">
                     <h2>Usuarios de la suite</h2>
                     <div class="panel-actions">
+                        <select id="filtro-app-usuarios"><option value="">Todas las apps</option></select>
                         <input type="search" id="buscar" placeholder="Buscar por correo…">
                         <button id="btn-otorgar" class="btn-primario">+ Otorgar acceso</button>
                     </div>
                 </div>
+                <p class="nota-panel oculto" id="nota-filtro-app"></p>
                 <div class="tabla-wrap">
                     <table id="tabla-usuarios">
                         <thead>
@@ -247,13 +261,15 @@
         </label>
         <label class="campo">
             <span>Vigencia</span>
-            <select id="ot-vigencia">
-                <option value="">Sin vencimiento</option>
-                <option value="1">1 mes</option>
-                <option value="3">3 meses</option>
-                <option value="6">6 meses</option>
-                <option value="12">1 año</option>
-            </select>
+            <div class="vigencia-combo">
+                <input type="number" id="ot-vig-cantidad" min="1" value="1">
+                <select id="ot-vig-unidad">
+                    <option value="">Sin vencimiento</option>
+                    <option value="horas">Horas</option>
+                    <option value="dias" selected>Días</option>
+                    <option value="meses">Meses</option>
+                </select>
+            </div>
         </label>
         <div class="modal-actions">
             <button id="ot-cancelar" class="btn-secundario">Cancelar</button>
@@ -270,19 +286,43 @@
         <p class="modal-sub" id="vig-titulo"></p>
         <label class="campo">
             <span>Nueva vigencia (desde hoy)</span>
-            <select id="vig-nueva">
-                <option value="quitar">Quitar vencimiento (dejar indefinido)</option>
-                <option value="1">Extender 1 mes</option>
-                <option value="3">Extender 3 meses</option>
-                <option value="6">Extender 6 meses</option>
-                <option value="12">Extender 1 año</option>
-            </select>
+            <div class="vigencia-combo">
+                <input type="number" id="vig-cantidad" min="1" value="1">
+                <select id="vig-unidad">
+                    <option value="quitar">Quitar vencimiento (indefinido)</option>
+                    <option value="horas">Horas</option>
+                    <option value="dias" selected>Días</option>
+                    <option value="meses">Meses</option>
+                </select>
+            </div>
         </label>
         <div class="modal-actions">
             <button id="vig-cancelar" class="btn-secundario">Cancelar</button>
             <button id="vig-confirmar" class="btn-primario">Guardar</button>
         </div>
         <p class="modal-msg" id="vig-msg"></p>
+    </div>
+</div>
+
+<!-- ==================== MODAL: registrar aplicación ==================== -->
+<div id="modal-app" class="modal oculto">
+    <div class="modal-card">
+        <h3>Registrar aplicación</h3>
+        <label class="campo">
+            <span>Nombre visible</span>
+            <input type="text" id="app-nombre" placeholder="Ej: Pérdidas Técnicas">
+        </label>
+        <label class="campo">
+            <span>Identificador (APP_SLUG, sin espacios ni tildes)</span>
+            <input type="text" id="app-slug" placeholder="Ej: perdidas_tecnicas">
+        </label>
+        <p class="modal-sub">Este identificador tiene que coincidir EXACTO con el <code>APP_SLUG</code> que
+            pongas en el <code>seguridad.py</code> de esa aplicación.</p>
+        <div class="modal-actions">
+            <button id="app-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="app-confirmar" class="btn-primario">Registrar</button>
+        </div>
+        <p class="modal-msg" id="app-msg"></p>
     </div>
 </div>
 

@@ -131,6 +131,7 @@ $$('.nav-item, .link-btn').forEach((btn) => {
 });
 const TITULOS = {
     panel: ['Panel', 'Vista general de la suite'],
+    aplicaciones: ['Aplicaciones', 'Una tarjeta por cada app de la suite'],
     usuarios: ['Usuarios', 'Gestión de identidades y accesos'],
     cerebro: ['Cerebro', 'Asistente sobre tus documentos, con memoria'],
     documentos: ['Documentos', 'Fuentes que lee el cerebro'],
@@ -144,10 +145,64 @@ function activarSeccion(nombre) {
     const [t, s] = TITULOS[nombre] || ['', ''];
     $('#titulo-vista').textContent = t;
     $('#subtitulo-vista').textContent = s;
+    if (nombre === 'aplicaciones') renderAplicaciones();
     if (nombre === 'cerebro') cargarConversaciones();
     if (nombre === 'logs') renderTablaLogsCompleta();
     if (nombre === 'soporte') renderTablaSoporte();
 }
+
+// -------------------------------------------------------------- aplicaciones
+function renderAplicaciones() {
+    const ahora = Date.now();
+    $('#apps-grid').innerHTML = apps.map((a, i) => {
+        const activos = accesos.filter((ac) => ac.app === a.slug && (!ac.expira || new Date(ac.expira).getTime() > ahora)).length;
+        return `
+        <div class="app-card" data-tilt-suave style="animation-delay:${i * 60}ms">
+            <div class="app-card-icono">🧩</div>
+            <h3>${escapeHtml(a.nombre)}</h3>
+            <span class="app-card-slug">${escapeHtml(a.slug)}</span>
+            <span class="app-card-conteo"><b>${activos}</b> usuario${activos === 1 ? '' : 's'} con acceso activo</span>
+            <div class="app-card-acciones">
+                <button class="btn-secundario" data-ver-app="${a.slug}">Ver usuarios</button>
+                <button class="btn-primario" data-otorgar-app="${a.slug}">+ Acceso</button>
+            </div>
+        </div>`;
+    }).join('') || '<p class="grafica-vacia">Todavía no hay aplicaciones registradas.</p>';
+
+    $$('[data-tilt-suave]').forEach((el) => { if (!el._tiltAplicado) { aplicarTilt(el, 1.5); el._tiltAplicado = true; } });
+}
+$('#apps-grid').addEventListener('click', (e) => {
+    const ver = e.target.closest('[data-ver-app]');
+    if (ver) { irAUsuariosDeApp(ver.dataset.verApp); return; }
+    const ot = e.target.closest('[data-otorgar-app]');
+    if (ot) { abrirModalOtorgar(ot.dataset.otorgarApp); }
+});
+function irAUsuariosDeApp(slug) {
+    activarSeccion('usuarios');
+    $('#filtro-app-usuarios').value = slug;
+    renderTabla($('#buscar').value);
+}
+
+$('#btn-registrar-app').addEventListener('click', () => {
+    $('#app-nombre').value = ''; $('#app-slug').value = ''; $('#app-msg').textContent = '';
+    $('#modal-app').classList.remove('oculto');
+});
+$('#app-cancelar').addEventListener('click', () => $('#modal-app').classList.add('oculto'));
+$('#modal-app').addEventListener('click', (e) => { if (e.target.id === 'modal-app') $('#modal-app').classList.add('oculto'); });
+
+$('#app-confirmar').addEventListener('click', async () => {
+    const nombre = $('#app-nombre').value.trim();
+    const slug = $('#app-slug').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const msg = $('#app-msg');
+    if (!nombre || !slug) { msg.textContent = 'Completá los dos campos.'; return; }
+    if (apps.some((a) => a.slug === slug)) { msg.textContent = 'Ya existe una app con ese identificador.'; return; }
+    const { error } = await supabase.from('apps').insert({ slug, nombre });
+    if (error) { msg.textContent = 'No se pudo registrar: ' + error.message; return; }
+    toast(`Aplicación "${nombre}" registrada.`);
+    $('#modal-app').classList.add('oculto');
+    await cargarTodo();
+    renderAplicaciones();
+});
 
 // ------------------------------------------------------------------ carga de datos
 async function cargarTodo() {
@@ -318,7 +373,17 @@ function renderTabla(filtro = '') {
     const tbody = $('#tbody-usuarios');
     tbody.innerHTML = '';
     const f = filtro.trim().toLowerCase();
-    const filas = usuarios.filter((u) => !f || u.correo.includes(f));
+    const appFiltro = $('#filtro-app-usuarios').value;
+    const nota = $('#nota-filtro-app');
+    if (appFiltro) {
+        nota.textContent = `Mostrando solo usuarios con acceso a "${nombreApp(appFiltro)}".`;
+        nota.classList.remove('oculto');
+    } else {
+        nota.classList.add('oculto');
+    }
+    const filas = usuarios.filter((u) =>
+        (!f || u.correo.includes(f)) &&
+        (!appFiltro || accesos.some((a) => a.correo === u.correo && a.app === appFiltro)));
     $('#tabla-vacia').classList.toggle('oculto', filas.length > 0);
     const ahora = Date.now();
 
@@ -394,25 +459,42 @@ $('#tbody-usuarios').addEventListener('change', async (e) => {
 });
 
 // -------------------------------------------------------------- otorgar acceso
-function poblarSelectApps() { $('#ot-app').innerHTML = apps.map((a) => `<option value="${a.slug}">${a.nombre}</option>`).join(''); }
+function poblarSelectApps() {
+    const opciones = apps.map((a) => `<option value="${a.slug}">${a.nombre}</option>`).join('');
+    $('#ot-app').innerHTML = opciones;
+    $('#filtro-app-usuarios').innerHTML = '<option value="">Todas las apps</option>' + opciones;
+}
+$('#filtro-app-usuarios').addEventListener('change', () => renderTabla($('#buscar').value));
 
-$('#btn-otorgar').addEventListener('click', () => {
-    $('#ot-correo').value = ''; $('#ot-vigencia').value = ''; $('#ot-msg').textContent = '';
-    $('#modal-otorgar').classList.remove('oculto');
-});
-$('#ot-cancelar').addEventListener('click', () => $('#modal-otorgar').classList.add('oculto'));
-$('#modal-otorgar').addEventListener('click', (e) => { if (e.target.id === 'modal-otorgar') $('#modal-otorgar').classList.add('oculto'); });
-
-function fechaMasMeses(meses) {
+// Calcula la fecha de vencimiento a partir de una cantidad + unidad (horas,
+// días o meses) -- null si no hay unidad (sin vencimiento).
+function calcularExpira(cantidad, unidad) {
+    if (!unidad) return null;
+    const n = Math.max(1, Number(cantidad) || 1);
     const d = new Date();
-    d.setMonth(d.getMonth() + Number(meses));
+    if (unidad === 'horas') d.setHours(d.getHours() + n);
+    else if (unidad === 'dias') d.setDate(d.getDate() + n);
+    else if (unidad === 'meses') d.setMonth(d.getMonth() + n);
     return d.toISOString();
 }
+
+function abrirModalOtorgar(appPreseleccionada = '') {
+    $('#ot-correo').value = '';
+    $('#ot-vig-cantidad').value = '1';
+    $('#ot-vig-unidad').value = 'dias';
+    $('#ot-msg').textContent = '';
+    if (appPreseleccionada) $('#ot-app').value = appPreseleccionada;
+    $('#modal-otorgar').classList.remove('oculto');
+}
+$('#btn-otorgar').addEventListener('click', () => abrirModalOtorgar());
+$('#ot-cancelar').addEventListener('click', () => $('#modal-otorgar').classList.add('oculto'));
+$('#modal-otorgar').addEventListener('click', (e) => { if (e.target.id === 'modal-otorgar') $('#modal-otorgar').classList.add('oculto'); });
 
 $('#ot-confirmar').addEventListener('click', async () => {
     const correo = $('#ot-correo').value.trim().toLowerCase();
     const app = $('#ot-app').value;
-    const vigencia = $('#ot-vigencia').value;
+    const cantidad = $('#ot-vig-cantidad').value;
+    const unidad = $('#ot-vig-unidad').value;
     const msg = $('#ot-msg');
     msg.textContent = '';
 
@@ -423,7 +505,7 @@ $('#ot-confirmar').addEventListener('click', async () => {
     }
     if (accesos.some((a) => a.correo === correo && a.app === app)) { msg.textContent = 'Ya tiene acceso a esa app.'; return; }
 
-    const expira = vigencia ? fechaMasMeses(vigencia) : null;
+    const expira = calcularExpira(cantidad, unidad);
     const { error } = await supabase.from('accesos').insert({ correo, app, expira });
     if (error) { msg.textContent = 'No se pudo otorgar: ' + error.message; return; }
     await supabase.from('logs_seguridad').insert({ tipo: 'acceso_otorgado', correo, app });
@@ -437,7 +519,8 @@ let vigContexto = null;
 function abrirModalVigencia(correo, app) {
     vigContexto = { correo, app };
     $('#vig-titulo').textContent = `${correo} · ${nombreApp(app)}`;
-    $('#vig-nueva').value = '1';
+    $('#vig-cantidad').value = '1';
+    $('#vig-unidad').value = 'dias';
     $('#vig-msg').textContent = '';
     $('#modal-vigencia').classList.remove('oculto');
 }
@@ -446,8 +529,8 @@ $('#modal-vigencia').addEventListener('click', (e) => { if (e.target.id === 'mod
 
 $('#vig-confirmar').addEventListener('click', async () => {
     if (!vigContexto) return;
-    const valor = $('#vig-nueva').value;
-    const expira = valor === 'quitar' ? null : fechaMasMeses(valor);
+    const unidad = $('#vig-unidad').value;
+    const expira = unidad === 'quitar' ? null : calcularExpira($('#vig-cantidad').value, unidad);
     const { error } = await supabase.from('accesos').update({ expira })
         .eq('correo', vigContexto.correo).eq('app', vigContexto.app);
     if (error) { $('#vig-msg').textContent = 'No se pudo guardar: ' + error.message; return; }

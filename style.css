@@ -278,6 +278,31 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
 
 .graficas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; margin-bottom: 18px; }
 
+/* ------------------------------------------------------------- APLICACIONES */
+.apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+.app-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px;
+    transform-style: preserve-3d; will-change: transform;
+    animation: entrar-arriba .4s cubic-bezier(.2,.8,.2,1) backwards;
+}
+.app-card-icono {
+    width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-ink);
+}
+.app-card h3 { margin: 0; font-size: 15px; }
+.app-card .app-card-slug { font-size: 11px; color: var(--text3); font-family: monospace; }
+.app-card .app-card-conteo { font-size: 12.5px; color: var(--text2); }
+.app-card .app-card-conteo b { color: var(--text); font-variant-numeric: tabular-nums; }
+.app-card-acciones { display: flex; gap: 8px; margin-top: 4px; }
+.app-card-acciones .btn-secundario, .app-card-acciones .btn-primario { flex: 1; padding: 8px 10px; font-size: 12px; text-align: center; }
+
+/* ------------------------------------------------------------- VIGENCIA */
+.vigencia-combo { display: flex; gap: 8px; }
+.vigencia-combo input[type="number"] { width: 80px; flex-shrink: 0; }
+.vigencia-combo select { flex: 1; }
+.modal-sub code { background: var(--bg-card-2); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
 .panel-card {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
     padding: 22px; box-shadow: var(--shadow); margin-bottom: 18px;
