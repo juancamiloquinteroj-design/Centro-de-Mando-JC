@@ -37,6 +37,7 @@ let usuarios = [];
 let accesos = [];
 let logs = [];
 let documentos = [];
+let soporte = [];
 let conversaciones = [];
 let conversacionActivaId = null;
 
@@ -126,6 +127,7 @@ const TITULOS = {
     usuarios: ['Usuarios', 'Gestión de identidades y accesos'],
     cerebro: ['Cerebro', 'Asistente sobre tus documentos, con memoria'],
     documentos: ['Documentos', 'Fuentes que lee el cerebro'],
+    soporte: ['Soporte', 'Mensajes de ayuda enviados desde las apps'],
     logs: ['Seguridad', 'Actividad y eventos de todas las apps'],
 };
 function activarSeccion(nombre) {
@@ -137,18 +139,21 @@ function activarSeccion(nombre) {
     $('#subtitulo-vista').textContent = s;
     if (nombre === 'cerebro') cargarConversaciones();
     if (nombre === 'logs') renderTablaLogsCompleta();
+    if (nombre === 'soporte') renderTablaSoporte();
 }
 
 // ------------------------------------------------------------------ carga de datos
 async function cargarTodo() {
-    const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: docs }] = await Promise.all([
+    const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: docs }, { data: sop }] = await Promise.all([
         supabase.from('apps').select('slug,nombre').order('nombre'),
         supabase.from('usuarios').select('correo,bloqueado,creado').order('creado', { ascending: false }),
         supabase.from('accesos').select('correo,app,creado,expira'),
         supabase.from('logs_seguridad').select('*').order('creado', { ascending: false }).limit(200),
         supabase.from('documentos').select('id,titulo,categoria,storage_path,creado').order('creado', { ascending: false }),
+        supabase.from('mensajes_soporte').select('*').order('creado', { ascending: false }),
     ]);
     apps = a || []; usuarios = u || []; accesos = ac || []; logs = lg || []; documentos = docs || [];
+    soporte = sop || [];
 
     renderStats();
     renderGraficaCrecimiento();
@@ -157,6 +162,7 @@ async function cargarTodo() {
     renderTabla($('#buscar').value);
     poblarSelectApps();
     renderTablaDocumentos();
+    renderBadgeSoporte();
 }
 
 // ------------------------------------------------------------------ stats
@@ -167,11 +173,13 @@ function renderStats() {
     const hace7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const alertas = logs.filter((l) => l.tipo === 'login_fallido' && new Date(l.creado).getTime() >= hace7d).length + bloqueados;
 
+    const sinResponder = soporte.filter((s) => s.estado === 'abierto').length;
     const items = [
         { icono: '👤', valor: usuarios.length, label: 'Total usuarios' },
         { icono: '🧩', valor: apps.length, label: 'Aplicaciones activas' },
         { icono: '✨', valor: nuevosMes, label: 'Nuevos este mes' },
         { icono: '⚠️', valor: alertas, label: 'Alertas de seguridad' },
+        { icono: '✉️', valor: sinResponder, label: 'Mensajes sin responder' },
     ];
     const cont = $('#stats');
     cont.innerHTML = '';
@@ -503,6 +511,73 @@ $('#doc-confirmar').addEventListener('click', async () => {
     $('#modal-doc').classList.add('oculto');
     $('#input-pdf').value = ''; archivoPdf = null;
     await cargarTodo();
+});
+
+// ------------------------------------------------------------------ soporte
+function renderBadgeSoporte() {
+    const n = soporte.filter((s) => s.estado === 'abierto').length;
+    const badge = $('#badge-soporte');
+    badge.textContent = n;
+    badge.classList.toggle('oculto', n === 0);
+}
+
+function etiquetaEstadoSoporte(e) {
+    return { abierto: 'Sin responder', respondido: 'Respondido', cerrado: 'Resuelto' }[e] || e;
+}
+
+function renderTablaSoporte() {
+    const filtro = $('#filtro-soporte').value;
+    const filas = filtro ? soporte.filter((s) => s.estado === filtro) : soporte;
+    $('#soporte-vacio').classList.toggle('oculto', filas.length > 0);
+    $('#tbody-soporte').innerHTML = filas.map((s) => `
+        <tr>
+            <td class="col-correo">${escapeHtml(s.correo)}</td>
+            <td>${escapeHtml(s.app ? nombreApp(s.app) : '—')}</td>
+            <td class="col-mensaje" title="${escapeHtml(s.mensaje)}">${escapeHtml(s.mensaje)}</td>
+            <td><span class="tipo-tag tipo-${s.estado}">${etiquetaEstadoSoporte(s.estado)}</span></td>
+            <td class="col-fecha">${new Date(s.creado).toLocaleString('es-CO')}</td>
+            <td class="col-borrar"><button class="btn-icono" data-abrir-sop="${s.id}" title="Ver / responder">👁</button></td>
+        </tr>`).join('');
+}
+$('#filtro-soporte').addEventListener('change', renderTablaSoporte);
+
+let soporteContexto = null;
+$('#tbody-soporte').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-abrir-sop]');
+    if (!btn) return;
+    const s = soporte.find((x) => x.id === Number(btn.dataset.abrirSop));
+    if (!s) return;
+    soporteContexto = s;
+    $('#sop-encabezado').textContent =
+        `${s.correo} · ${s.app ? nombreApp(s.app) : '—'} · ${new Date(s.creado).toLocaleString('es-CO')}`;
+    $('#sop-mensaje').textContent = s.mensaje;
+    $('#sop-respuesta').value = s.respuesta || '';
+    $('#sop-msg').textContent = '';
+    $('#modal-soporte').classList.remove('oculto');
+});
+$('#sop-cancelar').addEventListener('click', () => $('#modal-soporte').classList.add('oculto'));
+$('#modal-soporte').addEventListener('click', (e) => { if (e.target.id === 'modal-soporte') $('#modal-soporte').classList.add('oculto'); });
+
+$('#sop-guardar').addEventListener('click', async () => {
+    if (!soporteContexto) return;
+    const respuesta = $('#sop-respuesta').value.trim();
+    const { error } = await supabase.from('mensajes_soporte')
+        .update({ respuesta, estado: 'respondido', respondido_en: new Date().toISOString() })
+        .eq('id', soporteContexto.id);
+    if (error) { $('#sop-msg').textContent = 'No se pudo guardar: ' + error.message; return; }
+    toast('Respuesta guardada.');
+    $('#modal-soporte').classList.add('oculto');
+    await cargarTodo();
+    renderTablaSoporte();
+});
+$('#sop-marcar-cerrado').addEventListener('click', async () => {
+    if (!soporteContexto) return;
+    const { error } = await supabase.from('mensajes_soporte').update({ estado: 'cerrado' }).eq('id', soporteContexto.id);
+    if (error) { $('#sop-msg').textContent = 'No se pudo actualizar: ' + error.message; return; }
+    toast('Marcado como resuelto.');
+    $('#modal-soporte').classList.add('oculto');
+    await cargarTodo();
+    renderTablaSoporte();
 });
 
 // ------------------------------------------------------------------ cerebro

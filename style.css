@@ -237,6 +237,11 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
 .nav-icono { font-size: 15px; }
 .nav-item:hover { background: rgba(255,255,255,0.06); color: var(--text-sidebar); }
 .nav-item.activo { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.nav-badge {
+    margin-left: auto; background: var(--danger); color: #fff;
+    font-size: 10.5px; font-weight: 700; border-radius: 999px;
+    padding: 1px 7px; line-height: 1.5;
+}
 
 .sidebar-footer { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; }
 .sidebar-user { display: flex; flex-direction: column; gap: 8px; }
@@ -337,6 +342,15 @@ tbody tr:last-child td { border-bottom: none; }
 .tipo-tag { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .tipo-login_ok, .tipo-desbloqueo, .tipo-acceso_otorgado { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
 .tipo-login_fallido, .tipo-bloqueo, .tipo-borrado, .tipo-acceso_revocado { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+
+.tipo-abierto { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.tipo-respondido { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent2); }
+.tipo-cerrado { background: color-mix(in srgb, var(--text3) 16%, transparent); color: var(--text3); }
+.col-mensaje { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sop-mensaje {
+    background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5; margin: 0 0 16px; white-space: pre-wrap;
+}
 
 /* ---------------------------------------------------------------- CEREBRO */
 .cerebro-layout { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }

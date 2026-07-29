@@ -56,6 +56,7 @@
             <button class="nav-item" data-vista="usuarios"><span class="nav-icono">👤</span> Usuarios</button>
             <button class="nav-item" data-vista="cerebro"><span class="nav-icono">🧠</span> Cerebro</button>
             <button class="nav-item" data-vista="documentos"><span class="nav-icono">📄</span> Documentos</button>
+            <button class="nav-item" data-vista="soporte"><span class="nav-icono">✉️</span> Soporte <span class="nav-badge oculto" id="badge-soporte">0</span></button>
             <button class="nav-item" data-vista="logs"><span class="nav-icono">🛡️</span> Seguridad</button>
         </nav>
         <div class="sidebar-footer">
@@ -177,6 +178,31 @@
             </div>
         </section>
 
+        <!-- ---------- SOPORTE (mensajes de ayuda de las apps) ---------- -->
+        <section id="seccion-soporte" class="seccion-vista oculto">
+            <div class="panel-card" data-tilt-suave>
+                <div class="panel-head">
+                    <h2>Mensajes de soporte</h2>
+                    <div class="panel-actions">
+                        <select id="filtro-soporte">
+                            <option value="abierto">Sin responder</option>
+                            <option value="">Todos</option>
+                            <option value="respondido">Respondidos</option>
+                            <option value="cerrado">Cerrados</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="nota-panel">Mensajes que los usuarios mandan con el botón "Ayuda" desde cada app.</p>
+                <div class="tabla-wrap">
+                    <table id="tabla-soporte">
+                        <thead><tr><th>Correo</th><th>App</th><th>Mensaje</th><th>Estado</th><th>Cuándo</th><th></th></tr></thead>
+                        <tbody id="tbody-soporte"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="soporte-vacio">No hay mensajes con ese filtro.</p>
+                </div>
+            </div>
+        </section>
+
         <!-- ---------- SEGURIDAD (logs completos) ---------- -->
         <section id="seccion-logs" class="seccion-vista oculto">
             <div class="panel-card" data-tilt-suave>
@@ -278,6 +304,25 @@
             <button id="doc-confirmar" class="btn-primario">Subir</button>
         </div>
         <p class="modal-msg" id="doc-msg"></p>
+    </div>
+</div>
+
+<!-- ==================== MODAL: responder soporte ==================== -->
+<div id="modal-soporte" class="modal oculto">
+    <div class="modal-card">
+        <h3>Mensaje de soporte</h3>
+        <p class="modal-sub" id="sop-encabezado"></p>
+        <p class="sop-mensaje" id="sop-mensaje"></p>
+        <label class="campo">
+            <span>Respuesta (opcional)</span>
+            <textarea id="sop-respuesta" rows="3" placeholder="Le podés escribir directo por correo también; esto queda guardado como referencia."></textarea>
+        </label>
+        <div class="modal-actions">
+            <button id="sop-cancelar" class="btn-secundario">Cerrar</button>
+            <button id="sop-guardar" class="btn-secundario">Guardar respuesta</button>
+            <button id="sop-marcar-cerrado" class="btn-primario">Marcar como resuelto</button>
+        </div>
+        <p class="modal-msg" id="sop-msg"></p>
     </div>
 </div>
 
