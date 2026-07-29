@@ -54,7 +54,6 @@
         <nav class="sidebar-nav">
             <button class="nav-item" data-vista="panel"><span class="nav-icono">📊</span> Panel</button>
             <button class="nav-item" data-vista="aplicaciones"><span class="nav-icono">🧩</span> Aplicaciones</button>
-            <button class="nav-item" data-vista="usuarios"><span class="nav-icono">👤</span> Usuarios</button>
             <button class="nav-item" data-vista="cerebro"><span class="nav-icono">🧠</span> Cerebro</button>
             <button class="nav-item" data-vista="documentos"><span class="nav-icono">📄</span> Documentos</button>
             <button class="nav-item" data-vista="soporte"><span class="nav-icono">✉️</span> Soporte <span class="nav-badge oculto" id="badge-soporte">0</span></button>
@@ -115,36 +114,6 @@
                 </div>
             </div>
             <div class="apps-grid" id="apps-grid"></div>
-        </section>
-
-        <!-- ---------- USUARIOS ---------- -->
-        <section id="seccion-usuarios" class="seccion-vista oculto">
-            <div class="panel-card" data-tilt-suave>
-                <div class="panel-head">
-                    <h2>Usuarios de la suite</h2>
-                    <div class="panel-actions">
-                        <select id="filtro-app-usuarios"><option value="">Todas las apps</option></select>
-                        <input type="search" id="buscar" placeholder="Buscar por correo…">
-                        <button id="btn-otorgar" class="btn-primario">+ Otorgar acceso</button>
-                    </div>
-                </div>
-                <p class="nota-panel oculto" id="nota-filtro-app"></p>
-                <div class="tabla-wrap">
-                    <table id="tabla-usuarios">
-                        <thead>
-                            <tr>
-                                <th>Correo</th>
-                                <th>Accesos</th>
-                                <th>Creado</th>
-                                <th>Estado</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbody-usuarios"></tbody>
-                    </table>
-                    <p class="tabla-vacia oculto" id="tabla-vacia">No hay usuarios que coincidan.</p>
-                </div>
-            </div>
         </section>
 
         <!-- ---------- CEREBRO ---------- -->
@@ -276,31 +245,6 @@
             <button id="ot-confirmar" class="btn-primario">Otorgar</button>
         </div>
         <p class="modal-msg" id="ot-msg"></p>
-    </div>
-</div>
-
-<!-- ==================== MODAL: editar vigencia ==================== -->
-<div id="modal-vigencia" class="modal oculto">
-    <div class="modal-card">
-        <h3>Vigencia del acceso</h3>
-        <p class="modal-sub" id="vig-titulo"></p>
-        <label class="campo">
-            <span>Nueva vigencia (desde hoy)</span>
-            <div class="vigencia-combo">
-                <input type="number" id="vig-cantidad" min="1" value="1">
-                <select id="vig-unidad">
-                    <option value="quitar">Quitar vencimiento (indefinido)</option>
-                    <option value="horas">Horas</option>
-                    <option value="dias" selected>Días</option>
-                    <option value="meses">Meses</option>
-                </select>
-            </div>
-        </label>
-        <div class="modal-actions">
-            <button id="vig-cancelar" class="btn-secundario">Cancelar</button>
-            <button id="vig-confirmar" class="btn-primario">Guardar</button>
-        </div>
-        <p class="modal-msg" id="vig-msg"></p>
     </div>
 </div>
 

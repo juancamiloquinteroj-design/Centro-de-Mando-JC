@@ -286,17 +286,21 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
     transform-style: preserve-3d; will-change: transform;
     animation: entrar-arriba .4s cubic-bezier(.2,.8,.2,1) backwards;
 }
+.app-card[data-toggle-app] { cursor: pointer; transition: border-color .15s ease; }
+.app-card[data-toggle-app]:hover { border-color: var(--accent); }
 .app-card-cabecera { display: flex; align-items: center; gap: 12px; }
+.app-card-cabecera[data-toggle-app] { cursor: pointer; }
 .app-card-icono {
     width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
     font-size: 20px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-ink);
     flex-shrink: 0;
 }
-.app-card-titulos { min-width: 0; }
+.app-card-titulos { min-width: 0; flex: 1; }
 .app-card h3 { margin: 0; font-size: 15px; }
 .app-card .app-card-slug { font-size: 11px; color: var(--text3); font-family: monospace; }
 .app-card .app-card-conteo { font-size: 12.5px; color: var(--text2); }
 .app-card .app-card-conteo b { color: var(--text); font-variant-numeric: tabular-nums; }
+.app-card-cerrar { font-size: 11.5px; color: var(--text3); white-space: nowrap; }
 .app-card-acciones { display: flex; gap: 8px; margin-top: 4px; }
 .app-card-acciones .btn-secundario, .app-card-acciones .btn-primario { flex: 1; padding: 8px 10px; font-size: 12px; text-align: center; }
 
@@ -304,11 +308,12 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
 
 .app-panel { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 16px; }
 .app-panel-stats {
-    display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 14px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-bottom: 14px;
     font-size: 12.5px; color: var(--text2);
 }
 .app-panel-stats b { color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; display: block; }
 .app-panel-alerta b { color: var(--danger); }
+.app-panel-stats .btn-primario { margin-left: auto; padding: 8px 14px; font-size: 12px; }
 
 .tabla-app-panel { min-width: 480px; }
 .vig-inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

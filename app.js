@@ -132,7 +132,6 @@ $$('.nav-item, .link-btn').forEach((btn) => {
 const TITULOS = {
     panel: ['Panel', 'Vista general de la suite'],
     aplicaciones: ['Aplicaciones', 'Una tarjeta por cada app de la suite'],
-    usuarios: ['Usuarios', 'Gestión de identidades y accesos'],
     cerebro: ['Cerebro', 'Asistente sobre tus documentos, con memoria'],
     documentos: ['Documentos', 'Fuentes que lee el cerebro'],
     soporte: ['Soporte', 'Mensajes de ayuda enviados desde las apps'],
@@ -155,26 +154,30 @@ function activarSeccion(nombre) {
 let appExpandidaSlug = null;
 
 function renderAplicaciones() {
-    const ahora = Date.now();
     $('#apps-grid').innerHTML = apps.map((a, i) => {
         const misAccesos = accesos.filter((ac) => ac.app === a.slug);
-        const activos = misAccesos.filter((ac) => !ac.expira || new Date(ac.expira).getTime() > ahora).length;
         const expandida = a.slug === appExpandidaSlug;
+        if (!expandida) {
+            // Colapsada: solo el nombre -- todo lo demás vive adentro, al entrar.
+            return `
+            <div class="app-card" data-tilt-suave data-toggle-app="${a.slug}" style="animation-delay:${i * 60}ms">
+                <div class="app-card-cabecera">
+                    <div class="app-card-icono">🧩</div>
+                    <div class="app-card-titulos"><h3>${escapeHtml(a.nombre)}</h3></div>
+                </div>
+            </div>`;
+        }
         return `
-        <div class="app-card ${expandida ? 'app-card-expandida' : ''}" ${expandida ? '' : 'data-tilt-suave'} style="animation-delay:${i * 60}ms">
-            <div class="app-card-cabecera">
+        <div class="app-card app-card-expandida" style="animation-delay:${i * 60}ms">
+            <div class="app-card-cabecera" data-toggle-app="${a.slug}" title="Ocultar">
                 <div class="app-card-icono">🧩</div>
                 <div class="app-card-titulos">
                     <h3>${escapeHtml(a.nombre)}</h3>
                     <span class="app-card-slug">${escapeHtml(a.slug)}</span>
                 </div>
+                <span class="app-card-cerrar">Ocultar ▲</span>
             </div>
-            <span class="app-card-conteo"><b>${activos}</b> usuario${activos === 1 ? '' : 's'} con acceso activo</span>
-            <div class="app-card-acciones">
-                <button class="btn-secundario" data-toggle-app="${a.slug}">${expandida ? 'Ocultar usuarios ▲' : 'Ver usuarios ▾'}</button>
-                <button class="btn-primario" data-otorgar-app="${a.slug}">+ Acceso</button>
-            </div>
-            ${expandida ? panelUsuariosApp(a.slug, misAccesos) : ''}
+            ${panelUsuariosApp(a.slug, misAccesos)}
         </div>`;
     }).join('') || '<p class="grafica-vacia">Todavía no hay aplicaciones registradas.</p>';
 
@@ -201,6 +204,7 @@ function panelUsuariosApp(slug, misAccesos) {
                 <span><b>${activos}</b> activos</span>
                 <span class="${vencenPronto ? 'app-panel-alerta' : ''}"><b>${vencenPronto}</b> vencen ≤7 días</span>
                 <span class="${bloqueados ? 'app-panel-alerta' : ''}"><b>${bloqueados}</b> bloqueados</span>
+                <button class="btn-primario" data-otorgar-app="${slug}">+ Otorgar acceso</button>
             </div>
             <div class="tabla-wrap">
                 <table class="tabla-app-panel">
@@ -241,7 +245,10 @@ function filaUsuarioApp(u, a, slug) {
                     <span class="slider"></span>
                 </label>
             </td>
-            <td class="col-borrar"><button class="btn-icono" data-revocar="${u.correo}|${slug}" title="Revocar acceso a esta app">🗑</button></td>
+            <td class="col-borrar">
+                <button class="btn-icono" data-revocar="${u.correo}|${slug}" title="Revocar acceso a esta app">🗑</button>
+                <button class="btn-icono" data-borrar-cuenta="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button>
+            </td>
         </tr>`;
 }
 
@@ -256,6 +263,18 @@ $('#apps-grid').addEventListener('click', async (e) => {
     const ot = e.target.closest('[data-otorgar-app]');
     if (ot) { abrirModalOtorgar(ot.dataset.otorgarApp); return; }
 
+    const borrarCuenta = e.target.closest('[data-borrar-cuenta]');
+    if (borrarCuenta) {
+        const correo = borrarCuenta.dataset.borrarCuenta;
+        if (!confirm(`¿Borrar la cuenta de "${correo}"? Pierde el acceso a TODAS las apps de la suite, no solo esta.`)) return;
+        const { error } = await supabase.from('usuarios').delete().eq('correo', correo);
+        if (error) { toast('No se pudo borrar: ' + error.message, 'error'); return; }
+        await supabase.from('logs_seguridad').insert({ tipo: 'borrado', correo });
+        toast(`Cuenta de "${correo}" borrada.`);
+        await cargarTodo();
+        return;
+    }
+
     const vigOk = e.target.closest('[data-vig-app]');
     if (vigOk) {
         const [correo, app] = vigOk.dataset.vigApp.split('|');
@@ -266,7 +285,6 @@ $('#apps-grid').addEventListener('click', async (e) => {
         if (error) { toast('No se pudo guardar: ' + error.message, 'error'); return; }
         toast('Vigencia actualizada.');
         await cargarTodo();
-        renderAplicaciones();
         return;
     }
 
@@ -279,7 +297,6 @@ $('#apps-grid').addEventListener('click', async (e) => {
         await supabase.from('logs_seguridad').insert({ tipo: 'acceso_revocado', correo, app });
         toast('Acceso revocado.');
         await cargarTodo();
-        renderAplicaciones();
     }
 });
 
@@ -293,7 +310,6 @@ $('#apps-grid').addEventListener('change', async (e) => {
     await supabase.from('logs_seguridad').insert({ tipo: bloqueado ? 'bloqueo' : 'desbloqueo', correo });
     toast(bloqueado ? `"${correo}" bloqueado.` : `"${correo}" desbloqueado.`);
     await cargarTodo();
-    renderAplicaciones();
 });
 
 $('#btn-registrar-app').addEventListener('click', () => {
@@ -314,7 +330,6 @@ $('#app-confirmar').addEventListener('click', async () => {
     toast(`Aplicación "${nombre}" registrada.`);
     $('#modal-app').classList.add('oculto');
     await cargarTodo();
-    renderAplicaciones();
 });
 
 // ------------------------------------------------------------------ carga de datos
@@ -334,10 +349,10 @@ async function cargarTodo() {
     renderGraficaCrecimiento();
     renderGraficaApps();
     renderTablaLogsMini();
-    renderTabla($('#buscar').value);
     poblarSelectApps();
     renderTablaDocumentos();
     renderBadgeSoporte();
+    if (!$('#seccion-aplicaciones').classList.contains('oculto')) renderAplicaciones();
 }
 
 // ------------------------------------------------------------------ stats
@@ -481,103 +496,10 @@ function renderTablaLogsCompleta() {
 }
 $('#filtro-logs').addEventListener('change', renderTablaLogsCompleta);
 
-// ------------------------------------------------------------------ usuarios
-function renderTabla(filtro = '') {
-    const tbody = $('#tbody-usuarios');
-    tbody.innerHTML = '';
-    const f = filtro.trim().toLowerCase();
-    const appFiltro = $('#filtro-app-usuarios').value;
-    const nota = $('#nota-filtro-app');
-    if (appFiltro) {
-        nota.textContent = `Mostrando solo usuarios con acceso a "${nombreApp(appFiltro)}".`;
-        nota.classList.remove('oculto');
-    } else {
-        nota.classList.add('oculto');
-    }
-    const filas = usuarios.filter((u) =>
-        (!f || u.correo.includes(f)) &&
-        (!appFiltro || accesos.some((a) => a.correo === u.correo && a.app === appFiltro)));
-    $('#tabla-vacia').classList.toggle('oculto', filas.length > 0);
-    const ahora = Date.now();
-
-    filas.forEach((u, i) => {
-        const misAccesos = accesos.filter((a) => a.correo === u.correo);
-        const tr = document.createElement('tr');
-        tr.style.animationDelay = `${Math.min(i, 12) * 30}ms`;
-        tr.innerHTML = `
-            <td class="col-correo">${escapeHtml(u.correo)}</td>
-            <td class="chips">${
-                misAccesos.map((a) => {
-                    const vencido = a.expira && new Date(a.expira).getTime() < ahora;
-                    const claseVence = vencido ? 'chip chip-vence' : 'chip';
-                    const textoVence = a.expira ? ` · vence ${fechaCorta(a.expira)}` : '';
-                    return `<span class="${claseVence}">${escapeHtml(nombreApp(a.app))}${textoVence}
-                        <button class="chip-editar" data-editar-vig="${u.correo}|${a.app}" title="Editar vigencia">✎</button>
-                        <button class="chip-x" data-revocar="${u.correo}|${a.app}" title="Revocar acceso">×</button>
-                    </span>`;
-                }).join('') || '<span class="chip chip-vacio">sin accesos</span>'
-            }</td>
-            <td class="col-fecha">${fechaCorta(u.creado)}</td>
-            <td class="col-estado">
-                <label class="switch" title="${u.bloqueado ? 'Desbloquear' : 'Bloquear'}">
-                    <input type="checkbox" data-toggle="${u.correo}" ${u.bloqueado ? '' : 'checked'}>
-                    <span class="slider"></span>
-                </label>
-                <span class="estado-txt ${u.bloqueado ? 'estado-bloqueado' : 'estado-activo'}">${u.bloqueado ? 'Bloqueado' : 'Activo'}</span>
-            </td>
-            <td class="col-borrar"><button class="btn-icono" data-borrar="${u.correo}" title="Borrar usuario">🗑</button></td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-$('#buscar').addEventListener('input', (e) => renderTabla(e.target.value));
-
-$('#tbody-usuarios').addEventListener('click', async (e) => {
-    const borrar = e.target.closest('[data-borrar]');
-    if (borrar) {
-        const correo = borrar.dataset.borrar;
-        if (!confirm(`¿Borrar a "${correo}"? Pierde el acceso a TODAS las apps de la suite.`)) return;
-        const { error } = await supabase.from('usuarios').delete().eq('correo', correo);
-        if (error) { toast('No se pudo borrar: ' + error.message, 'error'); return; }
-        await supabase.from('logs_seguridad').insert({ tipo: 'borrado', correo });
-        toast(`Usuario "${correo}" borrado.`);
-        await cargarTodo();
-        return;
-    }
-    const revocar = e.target.closest('[data-revocar]');
-    if (revocar) {
-        const [correo, app] = revocar.dataset.revocar.split('|');
-        if (!confirm(`¿Revocar el acceso de "${correo}" a "${nombreApp(app)}"?`)) return;
-        const { error } = await supabase.from('accesos').delete().eq('correo', correo).eq('app', app);
-        if (error) { toast('No se pudo revocar: ' + error.message, 'error'); return; }
-        await supabase.from('logs_seguridad').insert({ tipo: 'acceso_revocado', correo, app });
-        toast('Acceso revocado.');
-        await cargarTodo();
-        return;
-    }
-    const editarVig = e.target.closest('[data-editar-vig]');
-    if (editarVig) abrirModalVigencia(...editarVig.dataset.editarVig.split('|'));
-});
-
-$('#tbody-usuarios').addEventListener('change', async (e) => {
-    const toggle = e.target.closest('[data-toggle]');
-    if (!toggle) return;
-    const correo = toggle.dataset.toggle;
-    const bloqueado = !toggle.checked;
-    const { error } = await supabase.from('usuarios').update({ bloqueado }).eq('correo', correo);
-    if (error) { toast('No se pudo actualizar: ' + error.message, 'error'); toggle.checked = !toggle.checked; return; }
-    await supabase.from('logs_seguridad').insert({ tipo: bloqueado ? 'bloqueo' : 'desbloqueo', correo });
-    toast(bloqueado ? `"${correo}" bloqueado.` : `"${correo}" desbloqueado.`);
-    await cargarTodo();
-});
-
 // -------------------------------------------------------------- otorgar acceso
 function poblarSelectApps() {
-    const opciones = apps.map((a) => `<option value="${a.slug}">${a.nombre}</option>`).join('');
-    $('#ot-app').innerHTML = opciones;
-    $('#filtro-app-usuarios').innerHTML = '<option value="">Todas las apps</option>' + opciones;
+    $('#ot-app').innerHTML = apps.map((a) => `<option value="${a.slug}">${a.nombre}</option>`).join('');
 }
-$('#filtro-app-usuarios').addEventListener('change', () => renderTabla($('#buscar').value));
 
 // Calcula la fecha de vencimiento a partir de una cantidad + unidad (horas,
 // días o meses) -- null si no hay unidad (sin vencimiento).
@@ -599,7 +521,6 @@ function abrirModalOtorgar(appPreseleccionada = '') {
     if (appPreseleccionada) $('#ot-app').value = appPreseleccionada;
     $('#modal-otorgar').classList.remove('oculto');
 }
-$('#btn-otorgar').addEventListener('click', () => abrirModalOtorgar());
 $('#ot-cancelar').addEventListener('click', () => $('#modal-otorgar').classList.add('oculto'));
 $('#modal-otorgar').addEventListener('click', (e) => { if (e.target.id === 'modal-otorgar') $('#modal-otorgar').classList.add('oculto'); });
 
@@ -624,31 +545,6 @@ $('#ot-confirmar').addEventListener('click', async () => {
     await supabase.from('logs_seguridad').insert({ tipo: 'acceso_otorgado', correo, app });
     toast(`Acceso a "${nombreApp(app)}" otorgado a "${correo}".`);
     $('#modal-otorgar').classList.add('oculto');
-    await cargarTodo();
-});
-
-// -------------------------------------------------------------- editar vigencia
-let vigContexto = null;
-function abrirModalVigencia(correo, app) {
-    vigContexto = { correo, app };
-    $('#vig-titulo').textContent = `${correo} · ${nombreApp(app)}`;
-    $('#vig-cantidad').value = '1';
-    $('#vig-unidad').value = 'dias';
-    $('#vig-msg').textContent = '';
-    $('#modal-vigencia').classList.remove('oculto');
-}
-$('#vig-cancelar').addEventListener('click', () => $('#modal-vigencia').classList.add('oculto'));
-$('#modal-vigencia').addEventListener('click', (e) => { if (e.target.id === 'modal-vigencia') $('#modal-vigencia').classList.add('oculto'); });
-
-$('#vig-confirmar').addEventListener('click', async () => {
-    if (!vigContexto) return;
-    const unidad = $('#vig-unidad').value;
-    const expira = unidad === 'quitar' ? null : calcularExpira($('#vig-cantidad').value, unidad);
-    const { error } = await supabase.from('accesos').update({ expira })
-        .eq('correo', vigContexto.correo).eq('app', vigContexto.app);
-    if (error) { $('#vig-msg').textContent = 'No se pudo guardar: ' + error.message; return; }
-    toast('Vigencia actualizada.');
-    $('#modal-vigencia').classList.add('oculto');
     await cargarTodo();
 });
 
