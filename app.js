@@ -152,36 +152,149 @@ function activarSeccion(nombre) {
 }
 
 // -------------------------------------------------------------- aplicaciones
+let appExpandidaSlug = null;
+
 function renderAplicaciones() {
     const ahora = Date.now();
     $('#apps-grid').innerHTML = apps.map((a, i) => {
-        const activos = accesos.filter((ac) => ac.app === a.slug && (!ac.expira || new Date(ac.expira).getTime() > ahora)).length;
+        const misAccesos = accesos.filter((ac) => ac.app === a.slug);
+        const activos = misAccesos.filter((ac) => !ac.expira || new Date(ac.expira).getTime() > ahora).length;
+        const expandida = a.slug === appExpandidaSlug;
         return `
-        <div class="app-card" data-tilt-suave style="animation-delay:${i * 60}ms">
-            <div class="app-card-icono">🧩</div>
-            <h3>${escapeHtml(a.nombre)}</h3>
-            <span class="app-card-slug">${escapeHtml(a.slug)}</span>
+        <div class="app-card ${expandida ? 'app-card-expandida' : ''}" ${expandida ? '' : 'data-tilt-suave'} style="animation-delay:${i * 60}ms">
+            <div class="app-card-cabecera">
+                <div class="app-card-icono">🧩</div>
+                <div class="app-card-titulos">
+                    <h3>${escapeHtml(a.nombre)}</h3>
+                    <span class="app-card-slug">${escapeHtml(a.slug)}</span>
+                </div>
+            </div>
             <span class="app-card-conteo"><b>${activos}</b> usuario${activos === 1 ? '' : 's'} con acceso activo</span>
             <div class="app-card-acciones">
-                <button class="btn-secundario" data-ver-app="${a.slug}">Ver usuarios</button>
+                <button class="btn-secundario" data-toggle-app="${a.slug}">${expandida ? 'Ocultar usuarios ▲' : 'Ver usuarios ▾'}</button>
                 <button class="btn-primario" data-otorgar-app="${a.slug}">+ Acceso</button>
             </div>
+            ${expandida ? panelUsuariosApp(a.slug, misAccesos) : ''}
         </div>`;
     }).join('') || '<p class="grafica-vacia">Todavía no hay aplicaciones registradas.</p>';
 
-    $$('[data-tilt-suave]').forEach((el) => { if (!el._tiltAplicado) { aplicarTilt(el, 1.5); el._tiltAplicado = true; } });
+    $$('#apps-grid .app-card:not(.app-card-expandida)').forEach((el) => aplicarTilt(el, 3));
 }
-$('#apps-grid').addEventListener('click', (e) => {
-    const ver = e.target.closest('[data-ver-app]');
-    if (ver) { irAUsuariosDeApp(ver.dataset.verApp); return; }
+
+function panelUsuariosApp(slug, misAccesos) {
+    const ahora = Date.now();
+    const activos = misAccesos.filter((a) => !a.expira || new Date(a.expira).getTime() > ahora).length;
+    const vencenPronto = misAccesos.filter((a) => a.expira && new Date(a.expira).getTime() > ahora
+        && new Date(a.expira).getTime() - ahora <= 7 * 86400000).length;
+    const bloqueados = misAccesos.filter((a) => usuarios.find((u) => u.correo === a.correo)?.bloqueado).length;
+
+    const filas = misAccesos.map((a) => {
+        const u = usuarios.find((x) => x.correo === a.correo);
+        if (!u) return '';
+        return filaUsuarioApp(u, a, slug);
+    }).join('');
+
+    return `
+        <div class="app-panel">
+            <div class="app-panel-stats">
+                <span><b>${misAccesos.length}</b> con acceso</span>
+                <span><b>${activos}</b> activos</span>
+                <span class="${vencenPronto ? 'app-panel-alerta' : ''}"><b>${vencenPronto}</b> vencen ≤7 días</span>
+                <span class="${bloqueados ? 'app-panel-alerta' : ''}"><b>${bloqueados}</b> bloqueados</span>
+            </div>
+            <div class="tabla-wrap">
+                <table class="tabla-app-panel">
+                    <thead><tr><th>Correo</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead>
+                    <tbody>${filas || `<tr><td colspan="4" class="tabla-vacia">Nadie tiene acceso a esta app todavía.</td></tr>`}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+function filaUsuarioApp(u, a, slug) {
+    const ahora = Date.now();
+    const vencido = a.expira && new Date(a.expira).getTime() < ahora;
+    let estadoVigencia;
+    if (!a.expira) estadoVigencia = 'Sin vencimiento';
+    else if (vencido) estadoVigencia = `Venció ${fechaCorta(a.expira)}`;
+    else estadoVigencia = `Vence ${fechaCorta(a.expira)}`;
+
+    return `
+        <tr>
+            <td class="col-correo">${escapeHtml(u.correo)}</td>
+            <td>
+                <div class="vig-inline">
+                    <span class="vig-inline-estado ${vencido ? 'chip-vence' : ''}">${estadoVigencia}</span>
+                    <input type="number" min="1" value="1" class="vig-inline-cant" data-vc="${u.correo}|${slug}">
+                    <select class="vig-inline-unidad" data-vu="${u.correo}|${slug}">
+                        <option value="quitar">Quitar</option>
+                        <option value="horas">Horas</option>
+                        <option value="dias" selected>Días</option>
+                        <option value="meses">Meses</option>
+                    </select>
+                    <button class="btn-icono vig-inline-ok" data-vig-app="${u.correo}|${slug}" title="Aplicar">✔</button>
+                </div>
+            </td>
+            <td class="col-estado">
+                <label class="switch" title="${u.bloqueado ? 'Desbloquear' : 'Bloquear'}">
+                    <input type="checkbox" data-toggle="${u.correo}" ${u.bloqueado ? '' : 'checked'}>
+                    <span class="slider"></span>
+                </label>
+            </td>
+            <td class="col-borrar"><button class="btn-icono" data-revocar="${u.correo}|${slug}" title="Revocar acceso a esta app">🗑</button></td>
+        </tr>`;
+}
+
+$('#apps-grid').addEventListener('click', async (e) => {
+    const toggleApp = e.target.closest('[data-toggle-app]');
+    if (toggleApp) {
+        const slug = toggleApp.dataset.toggleApp;
+        appExpandidaSlug = appExpandidaSlug === slug ? null : slug;
+        renderAplicaciones();
+        return;
+    }
     const ot = e.target.closest('[data-otorgar-app]');
-    if (ot) { abrirModalOtorgar(ot.dataset.otorgarApp); }
+    if (ot) { abrirModalOtorgar(ot.dataset.otorgarApp); return; }
+
+    const vigOk = e.target.closest('[data-vig-app]');
+    if (vigOk) {
+        const [correo, app] = vigOk.dataset.vigApp.split('|');
+        const cant = $(`[data-vc="${correo}|${app}"]`).value;
+        const unidad = $(`[data-vu="${correo}|${app}"]`).value;
+        const expira = unidad === 'quitar' ? null : calcularExpira(cant, unidad);
+        const { error } = await supabase.from('accesos').update({ expira }).eq('correo', correo).eq('app', app);
+        if (error) { toast('No se pudo guardar: ' + error.message, 'error'); return; }
+        toast('Vigencia actualizada.');
+        await cargarTodo();
+        renderAplicaciones();
+        return;
+    }
+
+    const revocar = e.target.closest('[data-revocar]');
+    if (revocar) {
+        const [correo, app] = revocar.dataset.revocar.split('|');
+        if (!confirm(`¿Revocar el acceso de "${correo}" a "${nombreApp(app)}"?`)) return;
+        const { error } = await supabase.from('accesos').delete().eq('correo', correo).eq('app', app);
+        if (error) { toast('No se pudo revocar: ' + error.message, 'error'); return; }
+        await supabase.from('logs_seguridad').insert({ tipo: 'acceso_revocado', correo, app });
+        toast('Acceso revocado.');
+        await cargarTodo();
+        renderAplicaciones();
+    }
 });
-function irAUsuariosDeApp(slug) {
-    activarSeccion('usuarios');
-    $('#filtro-app-usuarios').value = slug;
-    renderTabla($('#buscar').value);
-}
+
+$('#apps-grid').addEventListener('change', async (e) => {
+    const toggle = e.target.closest('[data-toggle]');
+    if (!toggle) return;
+    const correo = toggle.dataset.toggle;
+    const bloqueado = !toggle.checked;
+    const { error } = await supabase.from('usuarios').update({ bloqueado }).eq('correo', correo);
+    if (error) { toast('No se pudo actualizar: ' + error.message, 'error'); toggle.checked = !toggle.checked; return; }
+    await supabase.from('logs_seguridad').insert({ tipo: bloqueado ? 'bloqueo' : 'desbloqueo', correo });
+    toast(bloqueado ? `"${correo}" bloqueado.` : `"${correo}" desbloqueado.`);
+    await cargarTodo();
+    renderAplicaciones();
+});
 
 $('#btn-registrar-app').addEventListener('click', () => {
     $('#app-nombre').value = ''; $('#app-slug').value = ''; $('#app-msg').textContent = '';
