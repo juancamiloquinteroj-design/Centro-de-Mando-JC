@@ -29,7 +29,15 @@ alter table public.usuarios add column if not exists requiere_cambio_clave boole
 -- (en su seguridad.py) tiene que leer este campo NUEVO por NOMBRE (no por
 -- posición) y forzar el cambio de clave en el primer ingreso. Ese ajuste en
 -- seguridad.py queda pendiente en cada app, fuera de este repo.
-create or replace function public.rpc_credenciales(p_correo text, p_app text)
+--
+-- Postgres no deja cambiar el tipo de retorno de una función existente con
+-- CREATE OR REPLACE (el error 42P13 que tira el SQL Editor) -- hay que
+-- borrarla primero. El DROP se lleva puestos los grants/permisos que tuviera,
+-- por eso el GRANT de abajo los repone explícitamente para 'anon' (las apps
+-- de la suite llaman esta función con la anon key, sin sesión).
+drop function if exists public.rpc_credenciales(text, text);
+
+create function public.rpc_credenciales(p_correo text, p_app text)
 returns table(salt text, hash text, bloqueado boolean, tiene_acceso boolean, requiere_cambio_clave boolean)
 language sql security definer set search_path = public as $$
     select u.salt, u.hash, u.bloqueado,
@@ -40,6 +48,7 @@ language sql security definer set search_path = public as $$
     from usuarios u
     where u.correo = lower(p_correo);
 $$;
+grant execute on function public.rpc_credenciales(text, text) to anon;
 
 -- -----------------------------------------------------------------------------
 -- 2) ENLACES DE DESCARGA (módulo "Enlaces")

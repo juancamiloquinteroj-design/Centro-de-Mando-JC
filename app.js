@@ -567,6 +567,7 @@ function renderTablaUsuarios() {
                 ? '<span class="tipo-tag tipo-login_fallido">Debe cambiarla</span>'
                 : '<span class="tipo-tag tipo-login_ok">OK</span>'}</td>
             <td class="col-fecha">${fechaCorta(u.creado)}</td>
+            <td class="col-borrar"><button class="btn-icono" data-borrar-usuario="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button></td>
         </tr>`).join('');
 }
 $('#tbody-usuarios').addEventListener('change', async (e) => {
@@ -578,6 +579,17 @@ $('#tbody-usuarios').addEventListener('change', async (e) => {
     if (error) { toast('No se pudo actualizar: ' + error.message, 'error'); toggle.checked = !toggle.checked; return; }
     await supabase.from('logs_seguridad').insert({ tipo: bloqueado ? 'bloqueo' : 'desbloqueo', correo });
     toast(bloqueado ? `"${correo}" bloqueado.` : `"${correo}" desbloqueado.`);
+    await cargarTodo();
+});
+$('#tbody-usuarios').addEventListener('click', async (e) => {
+    const borrar = e.target.closest('[data-borrar-usuario]');
+    if (!borrar) return;
+    const correo = borrar.dataset.borrarUsuario;
+    if (!confirm(`¿Borrar la cuenta de "${correo}"? Pierde el acceso a TODAS las apps de la suite.`)) return;
+    const { error } = await supabase.from('usuarios').delete().eq('correo', correo);
+    if (error) { toast('No se pudo borrar: ' + error.message, 'error'); return; }
+    await supabase.from('logs_seguridad').insert({ tipo: 'borrado', correo });
+    toast(`Cuenta de "${correo}" borrada.`);
     await cargarTodo();
 });
 
