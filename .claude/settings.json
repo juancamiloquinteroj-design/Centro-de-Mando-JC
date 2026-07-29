@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/1. Contrato CINCO 2026/3. Desarrollos/**)",
+      "Read(//d/1. Contrato CINCO 2026/3. Desarrollos/2. Apliaciones Perdidas tecnicas/**)",
+      "Read(//d/1. Contrato CINCO 2026/**)"
+    ]
+  }
+}

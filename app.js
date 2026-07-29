@@ -43,10 +43,8 @@ let apps = [];
 let usuarios = [];
 let accesos = [];
 let logs = [];
-let documentos = [];
 let soporte = [];
-let conversaciones = [];
-let conversacionActivaId = null;
+let enlaces = [];
 
 // ------------------------------------------------------------------ utilidades
 function toast(msg, tipo = 'ok') {
@@ -132,8 +130,8 @@ $$('.nav-item, .link-btn').forEach((btn) => {
 const TITULOS = {
     panel: ['Panel', 'Vista general de la suite'],
     aplicaciones: ['Aplicaciones', 'Una tarjeta por cada app de la suite'],
-    cerebro: ['Cerebro', 'Asistente sobre tus documentos, con memoria'],
-    documentos: ['Documentos', 'Fuentes que lee el cerebro'],
+    usuarios: ['Usuarios', 'Crea cuentas nuevas y mandales la bienvenida'],
+    enlaces: ['Enlaces', 'Links de descarga que se incluyen en el correo de bienvenida'],
     soporte: ['Soporte', 'Mensajes de ayuda enviados desde las apps'],
     logs: ['Seguridad', 'Actividad y eventos de todas las apps'],
 };
@@ -145,7 +143,8 @@ function activarSeccion(nombre) {
     $('#titulo-vista').textContent = t;
     $('#subtitulo-vista').textContent = s;
     if (nombre === 'aplicaciones') renderAplicaciones();
-    if (nombre === 'cerebro') cargarConversaciones();
+    if (nombre === 'usuarios') renderTablaUsuarios();
+    if (nombre === 'enlaces') renderTablaEnlaces();
     if (nombre === 'logs') renderTablaLogsCompleta();
     if (nombre === 'soporte') renderTablaSoporte();
 }
@@ -334,25 +333,26 @@ $('#app-confirmar').addEventListener('click', async () => {
 
 // ------------------------------------------------------------------ carga de datos
 async function cargarTodo() {
-    const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: docs }, { data: sop }] = await Promise.all([
+    const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: sop }, { data: en }] = await Promise.all([
         supabase.from('apps').select('slug,nombre').order('nombre'),
-        supabase.from('usuarios').select('correo,bloqueado,creado').order('creado', { ascending: false }),
+        supabase.from('usuarios').select('correo,bloqueado,creado,requiere_cambio_clave').order('creado', { ascending: false }),
         supabase.from('accesos').select('correo,app,creado,expira'),
         supabase.from('logs_seguridad').select('*').order('creado', { ascending: false }).limit(200),
-        supabase.from('documentos').select('id,titulo,categoria,storage_path,creado').order('creado', { ascending: false }),
         supabase.from('mensajes_soporte').select('*').order('creado', { ascending: false }),
+        supabase.from('enlaces_apps').select('id,app,nombre,url,orden').order('app').order('orden'),
     ]);
-    apps = a || []; usuarios = u || []; accesos = ac || []; logs = lg || []; documentos = docs || [];
-    soporte = sop || [];
+    apps = a || []; usuarios = u || []; accesos = ac || []; logs = lg || [];
+    soporte = sop || []; enlaces = en || [];
 
     renderStats();
     renderGraficaCrecimiento();
     renderGraficaApps();
     renderTablaLogsMini();
     poblarSelectApps();
-    renderTablaDocumentos();
     renderBadgeSoporte();
     if (!$('#seccion-aplicaciones').classList.contains('oculto')) renderAplicaciones();
+    if (!$('#seccion-usuarios').classList.contains('oculto')) renderTablaUsuarios();
+    if (!$('#seccion-enlaces').classList.contains('oculto')) renderTablaEnlaces();
 }
 
 // ------------------------------------------------------------------ stats
@@ -482,7 +482,8 @@ function filaLog(l) {
 }
 function etiquetaTipo(t) {
     return { login_ok: 'Login OK', login_fallido: 'Login fallido', bloqueo: 'Bloqueo', desbloqueo: 'Desbloqueo',
-        borrado: 'Borrado', acceso_otorgado: 'Acceso otorgado', acceso_revocado: 'Acceso revocado' }[t] || t;
+        borrado: 'Borrado', acceso_otorgado: 'Acceso otorgado', acceso_revocado: 'Acceso revocado',
+        usuario_creado: 'Usuario creado', soporte_resuelto: 'Soporte resuelto' }[t] || t;
 }
 function renderTablaLogsMini() {
     $('#tbody-logs-mini').innerHTML = logs.slice(0, 8).map((l) => filaLog(l)).join('') ||
@@ -498,7 +499,9 @@ $('#filtro-logs').addEventListener('change', renderTablaLogsCompleta);
 
 // -------------------------------------------------------------- otorgar acceso
 function poblarSelectApps() {
-    $('#ot-app').innerHTML = apps.map((a) => `<option value="${a.slug}">${a.nombre}</option>`).join('');
+    const opciones = apps.map((a) => `<option value="${a.slug}">${a.nombre}</option>`).join('');
+    $('#ot-app').innerHTML = opciones;
+    $('#en-app').innerHTML = opciones;
 }
 
 // Calcula la fecha de vencimiento a partir de una cantidad + unidad (horas,
@@ -548,67 +551,163 @@ $('#ot-confirmar').addEventListener('click', async () => {
     await cargarTodo();
 });
 
-// ------------------------------------------------------------------ documentos
-function renderTablaDocumentos() {
-    $('#documentos-vacio').classList.toggle('oculto', documentos.length > 0);
-    $('#tbody-documentos').innerHTML = documentos.map((d) => `
+// ------------------------------------------------------------------ usuarios
+function renderTablaUsuarios() {
+    $('#usuarios-vacio').classList.toggle('oculto', usuarios.length > 0);
+    $('#tbody-usuarios').innerHTML = usuarios.map((u) => `
         <tr>
-            <td class="col-correo">${escapeHtml(d.titulo)}</td>
-            <td>${escapeHtml(d.categoria || '—')}</td>
-            <td class="col-fecha">${fechaCorta(d.creado)}</td>
-            <td class="col-borrar"><button class="btn-icono" data-borrar-doc="${d.id}" title="Borrar documento">🗑</button></td>
+            <td class="col-correo">${escapeHtml(u.correo)}</td>
+            <td class="col-estado">
+                <label class="switch" title="${u.bloqueado ? 'Desbloquear' : 'Bloquear'}">
+                    <input type="checkbox" data-toggle-usuario="${u.correo}" ${u.bloqueado ? '' : 'checked'}>
+                    <span class="slider"></span>
+                </label>
+            </td>
+            <td>${u.requiere_cambio_clave
+                ? '<span class="tipo-tag tipo-login_fallido">Debe cambiarla</span>'
+                : '<span class="tipo-tag tipo-login_ok">OK</span>'}</td>
+            <td class="col-fecha">${fechaCorta(u.creado)}</td>
         </tr>`).join('');
 }
-$('#tbody-documentos').addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-borrar-doc]');
-    if (!btn) return;
-    const id = Number(btn.dataset.borrarDoc);
-    const doc = documentos.find((d) => d.id === id);
-    if (!doc || !confirm(`¿Borrar "${doc.titulo}"? El cerebro dejará de usarlo.`)) return;
-    await supabase.storage.from('documentos').remove([doc.storage_path]);
-    const { error } = await supabase.from('documentos').delete().eq('id', id);
-    if (error) { toast('No se pudo borrar: ' + error.message, 'error'); return; }
-    toast('Documento borrado.');
+$('#tbody-usuarios').addEventListener('change', async (e) => {
+    const toggle = e.target.closest('[data-toggle-usuario]');
+    if (!toggle) return;
+    const correo = toggle.dataset.toggleUsuario;
+    const bloqueado = !toggle.checked;
+    const { error } = await supabase.from('usuarios').update({ bloqueado }).eq('correo', correo);
+    if (error) { toast('No se pudo actualizar: ' + error.message, 'error'); toggle.checked = !toggle.checked; return; }
+    await supabase.from('logs_seguridad').insert({ tipo: bloqueado ? 'bloqueo' : 'desbloqueo', correo });
+    toast(bloqueado ? `"${correo}" bloqueado.` : `"${correo}" desbloqueado.`);
     await cargarTodo();
 });
 
-let archivoPdf = null;
-$('#btn-subir-doc').addEventListener('click', () => $('#input-pdf').click());
-$('#input-pdf').addEventListener('change', () => {
-    archivoPdf = $('#input-pdf').files[0] || null;
-    if (!archivoPdf) return;
-    $('#doc-titulo').value = archivoPdf.name.replace(/\.pdf$/i, '');
-    $('#doc-categoria').value = '';
-    $('#doc-archivo-nombre').textContent = `Archivo: ${archivoPdf.name} (${(archivoPdf.size / 1024 / 1024).toFixed(1)} MB)`;
-    $('#doc-msg').textContent = '';
-    $('#modal-doc').classList.remove('oculto');
+// Checklist de apps del modal "Crear usuario" -- cada fila trae su propio
+// combo de vigencia (igual que "Otorgar acceso"), deshabilitado hasta que se
+// marque el checkbox de esa app.
+function renderChecklistAppsUsuario() {
+    $('#us-apps-lista').innerHTML = apps.map((a) => `
+        <div class="checklist-app-item">
+            <label class="campo-check">
+                <input type="checkbox" data-us-app="${a.slug}">
+                <span>${escapeHtml(a.nombre)}</span>
+            </label>
+            <div class="vigencia-combo">
+                <input type="number" min="1" value="1" data-us-vc="${a.slug}" disabled>
+                <select data-us-vu="${a.slug}" disabled>
+                    <option value="">Sin vencimiento</option>
+                    <option value="horas">Horas</option>
+                    <option value="dias" selected>Días</option>
+                    <option value="meses">Meses</option>
+                </select>
+            </div>
+        </div>`).join('') || '<p class="grafica-vacia">Registrá una app primero.</p>';
+}
+$('#us-apps-lista').addEventListener('change', (e) => {
+    const chk = e.target.closest('[data-us-app]');
+    if (!chk) return;
+    const slug = chk.dataset.usApp;
+    $(`[data-us-vc="${slug}"]`).disabled = !chk.checked;
+    $(`[data-us-vu="${slug}"]`).disabled = !chk.checked;
 });
-$('#doc-cancelar').addEventListener('click', () => { $('#modal-doc').classList.add('oculto'); $('#input-pdf').value = ''; });
-$('#modal-doc').addEventListener('click', (e) => { if (e.target.id === 'modal-doc') $('#modal-doc').classList.add('oculto'); });
 
-$('#doc-confirmar').addEventListener('click', async () => {
-    if (!archivoPdf) return;
-    const titulo = $('#doc-titulo').value.trim();
-    const categoria = $('#doc-categoria').value.trim();
-    const msg = $('#doc-msg');
-    if (!titulo) { msg.textContent = 'Ponele un título.'; return; }
+$('#btn-crear-usuario').addEventListener('click', () => {
+    $('#us-correo').value = ''; $('#us-msg').textContent = '';
+    renderChecklistAppsUsuario();
+    $('#modal-usuario').classList.remove('oculto');
+});
+$('#us-cancelar').addEventListener('click', () => $('#modal-usuario').classList.add('oculto'));
+$('#modal-usuario').addEventListener('click', (e) => { if (e.target.id === 'modal-usuario') $('#modal-usuario').classList.add('oculto'); });
 
-    msg.textContent = 'Subiendo…';
-    const ruta = `${Date.now()}_${archivoPdf.name.replace(/[^\w.\-]/g, '_')}`;
-    const { error: errSubida } = await supabase.storage.from('documentos').upload(ruta, archivoPdf, {
-        contentType: 'application/pdf',
+$('#us-confirmar').addEventListener('click', async () => {
+    const correo = $('#us-correo').value.trim().toLowerCase();
+    const msg = $('#us-msg');
+    const btn = $('#us-confirmar');
+    msg.textContent = '';
+    if (!correo || !correo.includes('@')) { msg.textContent = 'Correo inválido.'; return; }
+    if (usuarios.some((u) => u.correo === correo)) { msg.textContent = 'Ya existe una cuenta con ese correo.'; return; }
+
+    const accesosElegidos = $$('#us-apps-lista [data-us-app]:checked').map((chk) => {
+        const slug = chk.dataset.usApp;
+        const cant = $(`[data-us-vc="${slug}"]`).value;
+        const unidad = $(`[data-us-vu="${slug}"]`).value;
+        return { app: slug, expira: calcularExpira(cant, unidad) };
     });
-    if (errSubida) { msg.textContent = 'No se pudo subir el archivo: ' + errSubida.message; return; }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from('documentos').insert({
-        titulo, categoria: categoria || null, storage_path: ruta, subido_por: user?.email || null,
-    });
+    btn.disabled = true; btn.classList.add('cargando');
+    const { data, error } = await supabase.functions.invoke('crear-usuario', { body: { correo, accesos: accesosElegidos } });
+    btn.disabled = false; btn.classList.remove('cargando');
+
+    if (error || data?.error) { msg.textContent = 'No se pudo crear: ' + (data?.error || error.message); return; }
+
+    if (data.email_enviado === false) {
+        msg.textContent = `Usuario creado, pero el correo no se pudo enviar. Contraseña temporal: ${data.password_temporal} — copiala y pasásela a mano.`;
+        toast(`"${correo}" creado (avisale la clave a mano).`, 'error');
+    } else {
+        toast(`"${correo}" creado. Le llegó el correo de bienvenida.`);
+        $('#modal-usuario').classList.add('oculto');
+    }
+    await cargarTodo();
+});
+
+// ------------------------------------------------------------------ enlaces de descarga
+let enlaceEditando = null;
+
+function renderTablaEnlaces() {
+    $('#enlaces-vacio').classList.toggle('oculto', enlaces.length > 0);
+    $('#tbody-enlaces').innerHTML = enlaces.map((en) => `
+        <tr>
+            <td>${escapeHtml(nombreApp(en.app))}</td>
+            <td>${escapeHtml(en.nombre)}</td>
+            <td class="col-url"><a href="${escapeHtml(en.url)}" target="_blank" rel="noopener">${escapeHtml(en.url)}</a></td>
+            <td class="col-borrar">
+                <button class="btn-icono" data-editar-enlace="${en.id}" title="Editar">✎</button>
+                <button class="btn-icono" data-borrar-enlace="${en.id}" title="Borrar">🗑</button>
+            </td>
+        </tr>`).join('');
+}
+$('#tbody-enlaces').addEventListener('click', async (e) => {
+    const editar = e.target.closest('[data-editar-enlace]');
+    if (editar) { abrirModalEnlace(enlaces.find((en) => en.id === Number(editar.dataset.editarEnlace))); return; }
+
+    const borrar = e.target.closest('[data-borrar-enlace]');
+    if (borrar) {
+        const id = Number(borrar.dataset.borrarEnlace);
+        const en = enlaces.find((x) => x.id === id);
+        if (!en || !confirm(`¿Borrar el enlace "${en.nombre}"?`)) return;
+        const { error } = await supabase.from('enlaces_apps').delete().eq('id', id);
+        if (error) { toast('No se pudo borrar: ' + error.message, 'error'); return; }
+        toast('Enlace borrado.');
+        await cargarTodo();
+    }
+});
+
+function abrirModalEnlace(en = null) {
+    enlaceEditando = en;
+    $('#en-app').value = en?.app || apps[0]?.slug || '';
+    $('#en-nombre').value = en?.nombre || '';
+    $('#en-url').value = en?.url || '';
+    $('#en-msg').textContent = '';
+    $('#modal-enlace').classList.remove('oculto');
+}
+$('#btn-agregar-enlace').addEventListener('click', () => abrirModalEnlace());
+$('#en-cancelar').addEventListener('click', () => $('#modal-enlace').classList.add('oculto'));
+$('#modal-enlace').addEventListener('click', (e) => { if (e.target.id === 'modal-enlace') $('#modal-enlace').classList.add('oculto'); });
+
+$('#en-confirmar').addEventListener('click', async () => {
+    const app = $('#en-app').value;
+    const nombre = $('#en-nombre').value.trim();
+    const url = $('#en-url').value.trim();
+    const msg = $('#en-msg');
+    if (!app || !nombre || !url) { msg.textContent = 'Completá los tres campos.'; return; }
+
+    const payload = { app, nombre, url };
+    const { error } = enlaceEditando
+        ? await supabase.from('enlaces_apps').update(payload).eq('id', enlaceEditando.id)
+        : await supabase.from('enlaces_apps').insert(payload);
     if (error) { msg.textContent = 'No se pudo guardar: ' + error.message; return; }
 
-    toast(`"${titulo}" subido. Ya lo puede leer el cerebro.`);
-    $('#modal-doc').classList.add('oculto');
-    $('#input-pdf').value = ''; archivoPdf = null;
+    toast('Enlace guardado.');
+    $('#modal-enlace').classList.add('oculto');
     await cargarTodo();
 });
 
@@ -678,91 +777,23 @@ $('#sop-marcar-cerrado').addEventListener('click', async () => {
     await cargarTodo();
     renderTablaSoporte();
 });
-
-// ------------------------------------------------------------------ cerebro
-async function cargarConversaciones() {
-    const { data } = await supabase.from('conversaciones').select('id,titulo,actualizado').order('actualizado', { ascending: false });
-    conversaciones = data || [];
-    renderListaConversaciones();
-    if (!conversacionActivaId && conversaciones.length) await seleccionarConversacion(conversaciones[0].id);
-    else if (!conversaciones.length) mostrarChatVacio();
-}
-function renderListaConversaciones() {
-    $('#lista-conversaciones').innerHTML = conversaciones.map((c) => `
-        <button class="conv-item ${c.id === conversacionActivaId ? 'activa' : ''}" data-conv="${c.id}">${escapeHtml(c.titulo)}</button>
-    `).join('') || '<p class="chat-vacio">Sin conversaciones todavía.</p>';
-}
-$('#lista-conversaciones').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-conv]');
-    if (btn) seleccionarConversacion(btn.dataset.conv);
-});
-$('#btn-nueva-conv').addEventListener('click', async () => {
-    const { data, error } = await supabase.from('conversaciones').insert({ titulo: 'Nueva conversación' }).select().single();
-    if (error) { toast('No se pudo crear la conversación: ' + error.message, 'error'); return; }
-    conversaciones.unshift(data);
-    await seleccionarConversacion(data.id);
-});
-
-function mostrarChatVacio() {
-    $('#chat-mensajes').innerHTML = `<p class="chat-vacio">Preguntá algo sobre los documentos que hayas cargado.
-        El cerebro responde solo con base en ellos, citando capítulo o artículo cuando aplique.</p>`;
-}
-
-async function seleccionarConversacion(id) {
-    conversacionActivaId = id;
-    renderListaConversaciones();
-    const { data } = await supabase.from('mensajes').select('*').eq('conversacion_id', id).order('creado');
-    const cont = $('#chat-mensajes');
-    cont.innerHTML = '';
-    if (!data || !data.length) { mostrarChatVacio(); return; }
-    data.forEach((m) => agregarMensajeChat(m.contenido, m.rol === 'user' ? 'usuario' : 'cerebro', m.fuentes || []));
-}
-
-function agregarMensajeChat(texto, tipo, fuentes = []) {
-    const cont = $('#chat-mensajes');
-    cont.querySelector('.chat-vacio')?.remove();
-    const div = document.createElement('div');
-    div.className = `chat-burbuja chat-${tipo}`;
-    div.innerHTML = `<p>${escapeHtml(texto).replace(/\n/g, '<br>')}</p>`;
-    if (fuentes.length) {
-        div.innerHTML += `<div class="chat-fuentes">${fuentes.map((f) => `<span class="chip chip-fuente">${escapeHtml(f)}</span>`).join('')}</div>`;
-    }
-    cont.appendChild(div);
-    cont.scrollTop = cont.scrollHeight;
-    return div;
-}
-
-$('#form-chat').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!conversacionActivaId) {
-        const { data } = await supabase.from('conversaciones').insert({ titulo: 'Nueva conversación' }).select().single();
-        conversaciones.unshift(data);
-        conversacionActivaId = data.id;
-        renderListaConversaciones();
-    }
-    const input = $('#chat-input');
-    const pregunta = input.value.trim();
-    if (!pregunta) return;
-
-    const btn = $('#btn-chat');
+$('#sop-enviar-correo').addEventListener('click', async () => {
+    if (!soporteContexto) return;
+    if (!confirm(`¿Enviarle un correo a "${soporteContexto.correo}" avisando que se solucionó?`)) return;
+    const btn = $('#sop-enviar-correo');
     btn.disabled = true; btn.classList.add('cargando');
-    agregarMensajeChat(pregunta, 'usuario');
-    input.value = '';
-    const pensando = agregarMensajeChat('Pensando…', 'cerebro pensando');
-
-    const { data, error } = await supabase.functions.invoke('cerebro', {
-        body: { pregunta, conversacion_id: conversacionActivaId },
+    const { data, error } = await supabase.functions.invoke('enviar-correo-soporte', {
+        body: { mensaje_id: soporteContexto.id },
     });
-
-    pensando.remove();
     btn.disabled = false; btn.classList.remove('cargando');
 
-    if (error || data?.error) {
-        agregarMensajeChat('No se pudo obtener respuesta: ' + (data?.error || error.message), 'cerebro chat-error');
-        return;
-    }
-    agregarMensajeChat(data.respuesta || '(sin respuesta)', 'cerebro', data.fuentes || []);
-    await cargarConversaciones();
+    if (error || data?.error) { $('#sop-msg').textContent = 'No se pudo enviar: ' + (data?.error || error.message); return; }
+
+    toast(data.email_enviado ? 'Correo enviado y ticket cerrado.' : 'Ticket cerrado, pero el correo no se pudo enviar.',
+        data.email_enviado ? 'ok' : 'error');
+    $('#modal-soporte').classList.add('oculto');
+    await cargarTodo();
+    renderTablaSoporte();
 });
 
 intentarSesion();

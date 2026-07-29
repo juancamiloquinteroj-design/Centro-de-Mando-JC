@@ -392,7 +392,7 @@ tbody tr:last-child td { border-bottom: none; }
 .estado-bloqueado { color: var(--danger); }
 
 .tipo-tag { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
-.tipo-login_ok, .tipo-desbloqueo, .tipo-acceso_otorgado { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.tipo-login_ok, .tipo-desbloqueo, .tipo-acceso_otorgado, .tipo-usuario_creado, .tipo-soporte_resuelto { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
 .tipo-login_fallido, .tipo-bloqueo, .tipo-borrado, .tipo-acceso_revocado { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
 
 .tipo-abierto { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
@@ -404,32 +404,15 @@ tbody tr:last-child td { border-bottom: none; }
     padding: 12px 14px; font-size: 13px; line-height: 1.5; margin: 0 0 16px; white-space: pre-wrap;
 }
 
-/* ---------------------------------------------------------------- CEREBRO */
-.cerebro-layout { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }
-.conversaciones-panel { display: flex; flex-direction: column; gap: 12px; }
-.lista-conversaciones { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; }
-.conv-item {
-    padding: 10px 12px; border-radius: 10px; font-size: 12.5px; color: var(--text2);
-    cursor: pointer; border: 1px solid transparent; text-align: left; width: 100%;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+/* ----------------------------------------------------- USUARIOS / ENLACES */
+.checklist-apps { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; margin: -6px 0 16px; }
+.checklist-app-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card-2);
 }
-.conv-item:hover { background: var(--bg-card-2); }
-.conv-item.activa { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
-
-.chat-panel { display: flex; flex-direction: column; height: 68vh; }
-.chat-mensajes { flex: 1; overflow-y: auto; padding-right: 6px; margin-bottom: 14px; }
-.chat-vacio { color: var(--text3); font-size: 13px; text-align: center; padding: 40px 20px; }
-.chat-burbuja { max-width: 80%; padding: 12px 15px; border-radius: 14px; margin-bottom: 12px; font-size: 13.5px; line-height: 1.5; animation: entrar-fila .3s ease; }
-.chat-burbuja p { margin: 0; }
-.chat-usuario { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-ink); margin-left: auto; border-bottom-right-radius: 4px; }
-.chat-cerebro { background: var(--bg-card-2); border: 1px solid var(--border); margin-right: auto; border-bottom-left-radius: 4px; }
-.chat-cerebro.pensando { color: var(--text3); font-style: italic; }
-.chat-cerebro.chat-error { border-color: var(--danger); color: var(--danger); }
-.chat-fuentes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.chip-fuente { background: transparent; border: 1px dashed var(--border); color: var(--text3); font-size: 10.5px; }
-
-.chat-form { display: flex; gap: 10px; align-items: flex-end; }
-.chat-form textarea { resize: none; flex: 1; }
+.campo-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.campo-check input { width: 16px; height: 16px; }
+.col-url { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ==================================================================== MODAL */
 .modal {
@@ -466,8 +449,6 @@ tbody tr:last-child td { border-bottom: none; }
     .sidebar-nav { flex-direction: row; flex: 1; overflow-x: auto; }
     .nav-item span:last-child { display: none; }
     .sidebar-footer { display: none; }
-    .cerebro-layout { grid-template-columns: 1fr; }
-    .conversaciones-panel { display: none; }
 }
 @media (max-width: 640px) {
     .seccion-vista { padding: 20px 16px 50px; }

@@ -54,8 +54,8 @@
         <nav class="sidebar-nav">
             <button class="nav-item" data-vista="panel"><span class="nav-icono">📊</span> Panel</button>
             <button class="nav-item" data-vista="aplicaciones"><span class="nav-icono">🧩</span> Aplicaciones</button>
-            <button class="nav-item" data-vista="cerebro"><span class="nav-icono">🧠</span> Cerebro</button>
-            <button class="nav-item" data-vista="documentos"><span class="nav-icono">📄</span> Documentos</button>
+            <button class="nav-item" data-vista="usuarios"><span class="nav-icono">👥</span> Usuarios</button>
+            <button class="nav-item" data-vista="enlaces"><span class="nav-icono">🔗</span> Enlaces</button>
             <button class="nav-item" data-vista="soporte"><span class="nav-icono">✉️</span> Soporte <span class="nav-badge oculto" id="badge-soporte">0</span></button>
             <button class="nav-item" data-vista="logs"><span class="nav-icono">🛡️</span> Seguridad</button>
         </nav>
@@ -116,48 +116,45 @@
             <div class="apps-grid" id="apps-grid"></div>
         </section>
 
-        <!-- ---------- CEREBRO ---------- -->
-        <section id="seccion-cerebro" class="seccion-vista oculto">
-            <div class="cerebro-layout">
-                <aside class="conversaciones-panel panel-card" data-tilt-suave>
-                    <button id="btn-nueva-conv" class="btn-primario btn-ancho">+ Nueva conversación</button>
-                    <div id="lista-conversaciones" class="lista-conversaciones"></div>
-                </aside>
-                <div class="chat-panel panel-card" data-tilt-suave>
-                    <div class="chat-mensajes" id="chat-mensajes">
-                        <p class="chat-vacio">Preguntá algo sobre los documentos que hayas cargado. El cerebro
-                            responde solo con base en ellos, citando capítulo o artículo cuando aplique.</p>
+        <!-- ---------- USUARIOS ---------- -->
+        <section id="seccion-usuarios" class="seccion-vista oculto">
+            <div class="panel-card" data-tilt-suave>
+                <div class="panel-head">
+                    <h2>Usuarios de la suite</h2>
+                    <div class="panel-actions">
+                        <button id="btn-crear-usuario" class="btn-primario">+ Crear usuario</button>
                     </div>
-                    <form id="form-chat" class="chat-form">
-                        <textarea id="chat-input" rows="2" placeholder="Ej: ¿Qué dice la resolución sobre niveles de tensión?"></textarea>
-                        <button type="submit" class="btn-primario" id="btn-chat">
-                            <span class="btn-texto">Preguntar</span>
-                            <span class="btn-spinner"></span>
-                        </button>
-                    </form>
+                </div>
+                <p class="nota-panel">Crea la cuenta con una contraseña temporal y le manda un correo de bienvenida
+                    con esa clave y el link de descarga de las apps a las que le des acceso.</p>
+                <div class="tabla-wrap">
+                    <table id="tabla-usuarios">
+                        <thead><tr><th>Correo</th><th>Estado</th><th>Clave</th><th>Creado</th></tr></thead>
+                        <tbody id="tbody-usuarios"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="usuarios-vacio">Todavía no hay usuarios registrados.</p>
                 </div>
             </div>
         </section>
 
-        <!-- ---------- DOCUMENTOS ---------- -->
-        <section id="seccion-documentos" class="seccion-vista oculto">
+        <!-- ---------- ENLACES DE DESCARGA ---------- -->
+        <section id="seccion-enlaces" class="seccion-vista oculto">
             <div class="panel-card" data-tilt-suave>
                 <div class="panel-head">
-                    <h2>Documentos del cerebro</h2>
+                    <h2>Enlaces de descarga</h2>
                     <div class="panel-actions">
-                        <button id="btn-subir-doc" class="btn-primario">+ Subir documento (PDF)</button>
+                        <button id="btn-agregar-enlace" class="btn-primario">+ Agregar enlace</button>
                     </div>
                 </div>
-                <p class="nota-panel">El cerebro solo responde con base en lo que subas acá: resoluciones,
-                    libros, procedimientos. Formato PDF.</p>
+                <p class="nota-panel">Estos links se incluyen automáticamente en el correo de bienvenida de cada
+                    usuario nuevo, según las apps a las que se le dé acceso.</p>
                 <div class="tabla-wrap">
-                    <table id="tabla-documentos">
-                        <thead><tr><th>Título</th><th>Categoría</th><th>Subido</th><th></th></tr></thead>
-                        <tbody id="tbody-documentos"></tbody>
+                    <table id="tabla-enlaces">
+                        <thead><tr><th>App</th><th>Nombre</th><th>URL</th><th></th></tr></thead>
+                        <tbody id="tbody-enlaces"></tbody>
                     </table>
-                    <p class="tabla-vacia oculto" id="documentos-vacio">Todavía no has subido documentos.</p>
+                    <p class="tabla-vacia oculto" id="enlaces-vacio">Todavía no hay enlaces cargados.</p>
                 </div>
-                <input type="file" id="input-pdf" accept="application/pdf" class="oculto">
             </div>
         </section>
 
@@ -201,6 +198,8 @@
                             <option value="borrado">Usuarios borrados</option>
                             <option value="acceso_otorgado">Accesos otorgados</option>
                             <option value="acceso_revocado">Accesos revocados</option>
+                            <option value="usuario_creado">Usuarios creados</option>
+                            <option value="soporte_resuelto">Soporte resuelto</option>
                         </select>
                     </div>
                 </div>
@@ -270,24 +269,52 @@
     </div>
 </div>
 
-<!-- ==================== MODAL: subir documento ==================== -->
-<div id="modal-doc" class="modal oculto">
+<!-- ==================== MODAL: crear usuario ==================== -->
+<div id="modal-usuario" class="modal oculto">
     <div class="modal-card">
-        <h3>Subir documento</h3>
+        <h3>Crear usuario</h3>
         <label class="campo">
-            <span>Título</span>
-            <input type="text" id="doc-titulo" placeholder="Ej: Resolución CREG 015 de 2018">
+            <span>Correo del usuario</span>
+            <input type="email" id="us-correo" placeholder="nombre@empresa.com">
         </label>
         <label class="campo">
-            <span>Categoría</span>
-            <input type="text" id="doc-categoria" placeholder="Ej: CREG">
+            <span>Acceso inicial (opcional)</span>
         </label>
-        <p class="modal-sub" id="doc-archivo-nombre">Ningún archivo seleccionado.</p>
+        <div id="us-apps-lista" class="checklist-apps"></div>
+        <p class="modal-sub">Se genera una contraseña temporal y se le manda por correo, junto con el link de
+            descarga de cada app marcada. Al ingresar por primera vez deberá cambiarla.</p>
         <div class="modal-actions">
-            <button id="doc-cancelar" class="btn-secundario">Cancelar</button>
-            <button id="doc-confirmar" class="btn-primario">Subir</button>
+            <button id="us-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="us-confirmar" class="btn-primario">
+                <span class="btn-texto">Crear usuario</span>
+                <span class="btn-spinner"></span>
+            </button>
         </div>
-        <p class="modal-msg" id="doc-msg"></p>
+        <p class="modal-msg" id="us-msg"></p>
+    </div>
+</div>
+
+<!-- ==================== MODAL: enlace de descarga ==================== -->
+<div id="modal-enlace" class="modal oculto">
+    <div class="modal-card">
+        <h3>Enlace de descarga</h3>
+        <label class="campo">
+            <span>App</span>
+            <select id="en-app"></select>
+        </label>
+        <label class="campo">
+            <span>Nombre</span>
+            <input type="text" id="en-nombre" placeholder="Ej: Instalador Windows">
+        </label>
+        <label class="campo">
+            <span>URL</span>
+            <input type="url" id="en-url" placeholder="https://...">
+        </label>
+        <div class="modal-actions">
+            <button id="en-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="en-confirmar" class="btn-primario">Guardar</button>
+        </div>
+        <p class="modal-msg" id="en-msg"></p>
     </div>
 </div>
 
@@ -304,7 +331,11 @@
         <div class="modal-actions">
             <button id="sop-cancelar" class="btn-secundario">Cerrar</button>
             <button id="sop-guardar" class="btn-secundario">Guardar respuesta</button>
-            <button id="sop-marcar-cerrado" class="btn-primario">Marcar como resuelto</button>
+            <button id="sop-marcar-cerrado" class="btn-secundario">Marcar como resuelto</button>
+            <button id="sop-enviar-correo" class="btn-primario">
+                <span class="btn-texto">✉️ Enviar correo</span>
+                <span class="btn-spinner"></span>
+            </button>
         </div>
         <p class="modal-msg" id="sop-msg"></p>
     </div>
