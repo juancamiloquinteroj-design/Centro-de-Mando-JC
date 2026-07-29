@@ -1,14 +1,16 @@
 // app.js — Centro de Mando JC
-// La librería de Supabase se sirve DESDE ESTE MISMO SITIO (vendor-supabase.js),
-// no desde esm.sh -- algunas redes/antivirus bloquean CDNs externos como
-// esm.sh y eso dejaba el login "cargando" para siempre sin ningún error
-// visible. Sirviéndola local, solo depende de que GitHub Pages cargue (que
-// ya sabemos que sí) y de tu propio proyecto de Supabase.
-import { createClient } from './vendor-supabase.js';
+// La librería de Supabase se sirve DESDE ESTE MISMO SITIO (vendor-supabase.js,
+// cargado como <script> normal en index.html, ANTES que este archivo), no
+// desde esm.sh -- algunas redes/antivirus bloquean CDNs externos como esm.sh
+// y eso dejaba el login "cargando" para siempre sin ningún error visible.
+// Sirviéndola local, solo depende de que GitHub Pages cargue (que ya sabemos
+// que sí) y de tu propio proyecto de Supabase. vendor-supabase.js es la
+// build UMD: define una variable global 'supabase' (window.supabase), no un
+// módulo -- por eso acá NO se importa, se usa directo window.supabase.
 import { aplicarTilt } from './bg.js';
 
 const { url, anonKey } = window.SUPABASE_CONFIG;
-const supabase = createClient(url, anonKey);
+const supabase = window.supabase.createClient(url, anonKey);
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
