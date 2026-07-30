@@ -50,14 +50,14 @@ async function enviarCorreo(destinatario: string, asunto: string, html: string) 
     });
     try {
         await client.send({
-            from: `Centro de Mando JC <${GMAIL_USER}>`,
+            from: `NEXO <${GMAIL_USER}>`,
             to: destinatario,
             subject: asunto,
             content: "Tu cliente de correo no muestra HTML -- pedile a tu administrador los datos por otro medio.",
             html,
         });
     } finally {
-        await client.close();
+        try { await client.close(); } catch { /* no hay conexión que cerrar */ }
     }
 }
 

@@ -94,14 +94,17 @@ async function enviarCorreo(destinatario: string, asunto: string, html: string) 
     });
     try {
         await client.send({
-            from: `Centro de Mando JC <${GMAIL_USER}>`,
+            from: `NEXO <${GMAIL_USER}>`,
             to: destinatario,
             subject: asunto,
             content: "Tu cliente de correo no muestra HTML -- pedile a tu administrador los datos por otro medio.",
             html,
         });
     } finally {
-        await client.close();
+        // Si send() falla ANTES de terminar de conectar, el cliente interno
+        // queda a medio inicializar y close() explota con un error nuevo que
+        // tapa el real (el de arriba) -- lo aislamos para que no pase.
+        try { await client.close(); } catch { /* no hay conexión que cerrar */ }
     }
 }
 
@@ -125,13 +128,12 @@ function armarCorreoBienvenida(correo: string, password: string, enlacesPorApp: 
         <tr>
           <td style="background:#8B6B14;background-image:linear-gradient(135deg,#C9A227,#8B6B14);padding:30px 32px;text-align:center;">
             <div style="font-size:30px;line-height:1;">⚙</div>
-            <h1 style="margin:10px 0 0;color:#ffffff;font-size:20px;">Centro de Mando</h1>
-            <p style="margin:2px 0 0;color:rgba(255,255,255,0.85);font-size:11.5px;letter-spacing:1px;text-transform:uppercase;">CINCO S.A.S.</p>
+            <h1 style="margin:10px 0 0;color:#ffffff;font-size:20px;letter-spacing:1px;">NEXO</h1>
           </td>
         </tr>
         <tr>
           <td style="padding:32px;color:#2b2b2b;font-size:14px;line-height:1.6;">
-            <h2 style="margin:0 0 12px;font-size:18px;color:#1a1a1a;">¡Bienvenido!</h2>
+            <h2 style="margin:0 0 12px;font-size:18px;color:#1a1a1a;">¡Bienvenido a NEXO!</h2>
             <p style="margin:0 0 20px;">Se creó tu cuenta para acceder a la suite de aplicaciones. Estos son tus datos de ingreso:</p>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f4ec;border-radius:12px;margin:0 0 20px;">
               <tr><td style="padding:18px 20px;">
@@ -215,7 +217,7 @@ Deno.serve(async (req) => {
 
         let emailEnviado = true;
         try {
-            await enviarCorreo(correo, "Bienvenido al Centro de Mando JC", armarCorreoBienvenida(correo, password, enlacesPorApp));
+            await enviarCorreo(correo, "Bienvenido a NEXO", armarCorreoBienvenida(correo, password, enlacesPorApp));
         } catch (e) {
             // Antes esto se descartaba en silencio -- por eso no aparecía nada
             // en los Logs del Dashboard aunque el envío fallara. Ahora queda

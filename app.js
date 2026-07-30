@@ -402,6 +402,22 @@ $('#app-confirmar').addEventListener('click', async () => {
 });
 
 // ------------------------------------------------------------------ carga de datos
+// Los técnicos de Alumbrado Público NO viven en Supabase (están en el
+// Firestore de esa app, ver SLUG_ALUMBRADO más arriba) -- para que el Panel
+// los sume igual, se pide su conteo aparte acá, sin que un fallo ahí tumbe la
+// carga del resto del panel (por eso el try/catch: la app puede no estar
+// registrada todavía, o la Edge Function 'alumbrado' puede no estar deployada).
+let aluTecnicosCount = 0;
+async function cargarAluTecnicosCount() {
+    if (!apps.some((a) => a.slug === SLUG_ALUMBRADO)) { aluTecnicosCount = 0; return; }
+    try {
+        const { kpis } = await invocarAlumbrado('dashboard_kpis');
+        aluTecnicosCount = kpis?.usuarios || 0;
+    } catch {
+        aluTecnicosCount = 0;
+    }
+}
+
 async function cargarTodo() {
     const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: sop }, { data: en }] = await Promise.all([
         supabase.from('apps').select('slug,nombre,icono_url').order('nombre'),
@@ -413,6 +429,7 @@ async function cargarTodo() {
     ]);
     apps = a || []; usuarios = u || []; accesos = ac || []; logs = lg || [];
     soporte = sop || []; enlaces = en || [];
+    await cargarAluTecnicosCount();
 
     renderStats();
     renderGraficaCrecimiento();
@@ -434,8 +451,11 @@ function renderStats() {
     const alertas = logs.filter((l) => l.tipo === 'login_fallido' && new Date(l.creado).getTime() >= hace7d).length + bloqueados;
 
     const sinResponder = soporte.filter((s) => s.estado === 'abierto').length;
+    // Total usuarios = usuarios de la suite (Supabase) + técnicos de Alumbrado
+    // Público (Firestore, ver cargarAluTecnicosCount) -- "Nuevos este mes" NO
+    // los incluye porque esos registros no tienen fecha de creación guardada.
     const items = [
-        { icono: '👤', valor: usuarios.length, label: 'Total usuarios' },
+        { icono: '👤', valor: usuarios.length + aluTecnicosCount, label: 'Total usuarios' },
         { icono: '🧩', valor: apps.length, label: 'Aplicaciones activas' },
         { icono: '✨', valor: nuevosMes, label: 'Nuevos este mes' },
         { icono: '⚠️', valor: alertas, label: 'Alertas de seguridad' },
@@ -509,7 +529,11 @@ function renderGraficaApps() {
     const ahora = Date.now();
     const conteos = apps.map((a) => ({
         app: a,
-        n: accesos.filter((ac) => ac.app === a.slug && (!ac.expira || new Date(ac.expira).getTime() > ahora)).length,
+        // Alumbrado Público no usa 'accesos' de Supabase -- sus usuarios
+        // (técnicos) viven en Firestore, ya contados en aluTecnicosCount.
+        n: a.slug === SLUG_ALUMBRADO
+            ? aluTecnicosCount
+            : accesos.filter((ac) => ac.app === a.slug && (!ac.expira || new Date(ac.expira).getTime() > ahora)).length,
     }));
 
     const W = 560, H = 200, PAD = 30;
