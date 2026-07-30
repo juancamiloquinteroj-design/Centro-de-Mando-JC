@@ -354,6 +354,30 @@
     </div>
 </div>
 
+<!-- ==================== MODAL: zona de Alumbrado Público ==================== -->
+<div id="modal-zona" class="modal oculto">
+    <div class="modal-card">
+        <h3>Zona</h3>
+        <label class="campo">
+            <span>Nombre</span>
+            <input type="text" id="zona-nombre" placeholder="Ej: Sur">
+        </label>
+        <label class="campo">
+            <span>Municipios (uno por línea)</span>
+            <textarea id="zona-municipios" rows="5" placeholder="NEIVA&#10;PITALITO"></textarea>
+        </label>
+        <label class="campo">
+            <span>Correos que reciben el aviso de esta zona (uno por línea)</span>
+            <textarea id="zona-correos" rows="5" placeholder="correo1@ejemplo.com&#10;correo2@ejemplo.com"></textarea>
+        </label>
+        <div class="modal-actions">
+            <button id="zona-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="zona-confirmar" class="btn-primario">Guardar</button>
+        </div>
+        <p class="modal-msg" id="zona-msg"></p>
+    </div>
+</div>
+
 <!-- ==================== MODAL: responder soporte ==================== -->
 <div id="modal-soporte" class="modal oculto">
     <div class="modal-card">

@@ -8,7 +8,9 @@
       "PowerShell(gh auth status 2>&1)",
       "WebFetch(domain:juancamiloquinteroj-design.github.io)",
       "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "PowerShell(git -C \"d:\\\\1. Contrato CINCO 2026\\\\3. Desarrollos\\\\Centro de Mando JC\" remote -v 2>&1)",
+      "PowerShell(git -C \"d:\\\\1. Contrato CINCO 2026\\\\3. Desarrollos\\\\Centro de Mando JC\" status --short 2>&1)"
     ]
   }
 }

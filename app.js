@@ -922,6 +922,7 @@ function panelAlumbrado() {
                 <button class="subtab-item ${aluSubtabActiva === 'dashboard' ? 'activo' : ''}" data-subtab-alumbrado="dashboard">Dashboard</button>
                 <button class="subtab-item ${aluSubtabActiva === 'usuarios' ? 'activo' : ''}" data-subtab-alumbrado="usuarios">Usuarios técnicos</button>
                 <button class="subtab-item ${aluSubtabActiva === 'configuracion' ? 'activo' : ''}" data-subtab-alumbrado="configuracion">Configuración</button>
+                <button class="subtab-item ${aluSubtabActiva === 'zonas' ? 'activo' : ''}" data-subtab-alumbrado="zonas">Zonas</button>
                 <button class="subtab-item ${aluSubtabActiva === 'proyectos' ? 'activo' : ''}" data-subtab-alumbrado="proyectos">Proyectos</button>
                 <button class="subtab-item ${aluSubtabActiva === 'actividad' ? 'activo' : ''}" data-subtab-alumbrado="actividad">Actividad</button>
             </div>
@@ -971,6 +972,27 @@ function panelAlumbrado() {
                 <p class="modal-msg" id="alu-config-msg"></p>
             </div>
 
+            <div id="alu-tab-zonas" class="alu-tab ${aluSubtabActiva === 'zonas' ? '' : 'oculto'}">
+                <div class="panel-head">
+                    <h3>Zonas (aviso por correo según municipio)</h3>
+                    <div class="panel-actions">
+                        <button id="alu-btn-revisar-zonas" class="btn-secundario">🔄 Revisar ahora</button>
+                        <button id="alu-btn-crear-zona" class="btn-primario">+ Crear zona</button>
+                    </div>
+                </div>
+                <p class="nota-panel">Cuando se sincroniza un proyecto, se avisa por correo SOLO a la zona que
+                    corresponda según el municipio del proyecto -- aparte de "Correos destino" en Configuración
+                    (que sigue mandándole a todos, mientras se prueba este sistema nuevo). Se revisa automático
+                    cada 15 minutos, o con el botón de arriba.</p>
+                <div class="tabla-wrap">
+                    <table id="alu-tabla-zonas">
+                        <thead><tr><th>Zona</th><th>Municipios</th><th>Correos</th><th></th></tr></thead>
+                        <tbody id="alu-tbody-zonas"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="alu-zonas-vacio">Todavía no hay zonas creadas.</p>
+                </div>
+            </div>
+
             <div id="alu-tab-proyectos" class="alu-tab ${aluSubtabActiva === 'proyectos' ? '' : 'oculto'}">
                 <div class="tabla-wrap">
                     <table id="alu-tabla-proyectos">
@@ -1006,6 +1028,7 @@ function activarSubtabAlumbrado(nombre) {
     if (nombre === 'dashboard') cargarAluDashboard();
     if (nombre === 'usuarios') cargarAluUsuarios();
     if (nombre === 'configuracion') cargarAluConfiguracion();
+    if (nombre === 'zonas') cargarAluZonas();
     if (nombre === 'proyectos') cargarAluProyectos();
     if (nombre === 'actividad') cargarAluActividad();
 }
@@ -1141,6 +1164,64 @@ async function guardarAluConfiguracion() {
     } catch (e) { msg.textContent = 'No se pudo guardar: ' + e.message; }
 }
 
+// -------- zonas (correo automático por municipio)
+let aluZonasCache = [];
+let zonaEditando = null;
+
+async function cargarAluZonas() {
+    const tbody = $('#alu-tbody-zonas');
+    tbody.innerHTML = '<tr><td colspan="4">Cargando…</td></tr>';
+    try {
+        const { zonas } = await invocarAlumbrado('listar_zonas');
+        aluZonasCache = zonas || [];
+        $('#alu-zonas-vacio').classList.toggle('oculto', aluZonasCache.length > 0);
+        tbody.innerHTML = aluZonasCache.map((z) => `
+            <tr>
+                <td>${escapeHtml(z.nombre)}</td>
+                <td>${escapeHtml((z.municipios || []).join(', ') || '—')}</td>
+                <td>${(z.correos || []).length} correo(s)</td>
+                <td class="col-borrar">
+                    <button class="btn-icono" data-editar-zona="${escapeHtml(z.id)}" title="Editar">✎</button>
+                    <button class="btn-icono btn-icono-peligro" data-borrar-zona="${escapeHtml(z.id)}" title="Borrar">🗑</button>
+                </td>
+            </tr>`).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+
+function slugZona(nombre) {
+    return nombre.toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca tildes
+        .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
+function abrirModalZona(z = null) {
+    zonaEditando = z;
+    $('#zona-nombre').value = z?.nombre || '';
+    $('#zona-municipios').value = (z?.municipios || []).join('\n');
+    $('#zona-correos').value = (z?.correos || []).join('\n');
+    $('#zona-msg').textContent = '';
+    $('#modal-zona').classList.remove('oculto');
+}
+$('#zona-cancelar').addEventListener('click', () => $('#modal-zona').classList.add('oculto'));
+$('#modal-zona').addEventListener('click', (e) => { if (e.target.id === 'modal-zona') $('#modal-zona').classList.add('oculto'); });
+
+$('#zona-confirmar').addEventListener('click', async () => {
+    const nombre = $('#zona-nombre').value.trim();
+    const municipios = $('#zona-municipios').value.split('\n').map((m) => m.trim()).filter(Boolean);
+    const correos = $('#zona-correos').value.split('\n').map((c) => c.trim()).filter(Boolean);
+    const msg = $('#zona-msg');
+    if (!nombre) { msg.textContent = 'Ponele un nombre a la zona.'; return; }
+    const id = slugZona(nombre);
+    try {
+        await invocarAlumbrado('guardar_zona', { idOriginal: zonaEditando?.id || '', id, nombre, municipios, correos });
+        toast('Zona guardada.');
+        $('#modal-zona').classList.add('oculto');
+        await cargarAluZonas();
+    } catch (err) { msg.textContent = 'No se pudo guardar: ' + err.message; }
+});
+
 // -------- proyectos sincronizados
 async function cargarAluProyectos() {
     const tbody = $('#alu-tbody-proyectos');
@@ -1266,6 +1347,38 @@ $('#apps-grid').addEventListener('click', async (e) => {
     }
 
     if (e.target.closest('#alu-btn-guardar-config')) { await guardarAluConfiguracion(); return; }
+
+    if (e.target.closest('#alu-btn-crear-zona')) { abrirModalZona(); return; }
+
+    const editarZona = e.target.closest('[data-editar-zona]');
+    if (editarZona) { abrirModalZona(aluZonasCache.find((z) => z.id === editarZona.dataset.editarZona)); return; }
+
+    const borrarZona = e.target.closest('[data-borrar-zona]');
+    if (borrarZona) {
+        const id = borrarZona.dataset.borrarZona;
+        const z = aluZonasCache.find((x) => x.id === id);
+        if (!z || !confirm(`¿Borrar la zona "${z.nombre}"?`)) return;
+        try {
+            await invocarAlumbrado('borrar_zona', { id });
+            toast('Zona borrada.');
+            await cargarAluZonas();
+        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+        return;
+    }
+
+    if (e.target.closest('#alu-btn-revisar-zonas')) {
+        const btn = $('#alu-btn-revisar-zonas');
+        btn.disabled = true;
+        try {
+            const r = await invocarAlumbrado('revisar_proyectos_pendientes');
+            toast(`Revisado: ${r.avisados} avisado(s), ${r.sinZona} sin zona todavía, de ${r.revisados} pendiente(s).`);
+        } catch (err) {
+            toast('No se pudo revisar: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
+        return;
+    }
 
     const descargarProyecto = e.target.closest('[data-descargar-proyecto]');
     if (descargarProyecto) { await descargarZipProyecto(descargarProyecto.dataset.descargarProyecto); return; }

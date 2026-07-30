@@ -39,13 +39,22 @@
 //      -> descarga un JSON.
 //   2. Supabase Dashboard -> Edge Functions -> Secrets -> agregá
 //      FIREBASE_SERVICE_ACCOUNT_JSON pegando TODO el contenido de ese JSON.
+//      También usa GMAIL_USER / GMAIL_APP_PASSWORD para el aviso por zona --
+//      si ya los cargaste para 'crear-usuario', son los mismos, no hay que
+//      repetirlos.
 //   3. Dashboard -> Edge Functions -> "alumbrado" -> pegá este archivo -> Deploy.
+//   4. Correr supabase_cron_zonas_alumbrado.sql para que el aviso por zona se
+//      revise solo cada 15 minutos (si no, solo se dispara a mano).
 // =============================================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const GMAIL_USER = Deno.env.get("GMAIL_USER")!;
+const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const CUENTA_SERVICIO = JSON.parse(Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")!);
 
 const PROJECT_ID = CUENTA_SERVICIO.project_id;
@@ -216,7 +225,7 @@ async function listarArchivosStorage(prefix: string): Promise<string[]> {
     const resp = await fetch(`https://storage.googleapis.com/storage/v1/b/${STORAGE_BUCKET}/o?prefix=${encodeURIComponent(prefix)}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
-    if (!resp.ok) return [];
+    if (!resp.ok) throw new Error(`Storage respondió ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
     // deno-lint-ignore no-explicit-any
     return (data.items || []).map((i: any) => i.name as string);
@@ -231,7 +240,7 @@ async function listarFotosConUrl(prefix: string): Promise<{ nombre: string; url:
     const resp = await fetch(`https://storage.googleapis.com/storage/v1/b/${STORAGE_BUCKET}/o?prefix=${encodeURIComponent(prefix)}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
-    if (!resp.ok) return [];
+    if (!resp.ok) throw new Error(`Storage respondió ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
     // deno-lint-ignore no-explicit-any
     return (data.items || []).map((item: any) => {
@@ -250,21 +259,111 @@ async function borrarArchivoStorage(nombre: string) {
     }).catch(() => {});
 }
 
+// ------------------------------------------------------------------- correo
+// Mismo mecanismo que 'crear-usuario'/'enviar-correo-soporte' (Gmail SMTP,
+// mismos secrets GMAIL_USER/GMAIL_APP_PASSWORD -- ya están cargados si esas
+// funciones ya te andan). Lo usa el aviso automático por zona, más abajo.
+async function enviarCorreo(destinatarios: string[], asunto: string, html: string) {
+    const client = new SMTPClient({
+        connection: {
+            hostname: "smtp.gmail.com",
+            port: 465,
+            tls: true,
+            auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
+        },
+    });
+    try {
+        await client.send({
+            from: `NEXO <${GMAIL_USER}>`,
+            to: destinatarios,
+            subject: asunto,
+            content: "Tu cliente de correo no muestra HTML.",
+            html,
+        });
+    } finally {
+        try { await client.close(); } catch { /* no hay conexión que cerrar */ }
+    }
+}
+
+// Normaliza para comparar "Neiva" con "NEIVA " sin que un espacio o
+// mayúscula/minúscula haga que un proyecto no encuentre su zona.
+function normalizar(texto: string): string {
+    return String(texto || "").trim().toUpperCase();
+}
+
+// ------------------------------------------------------------- zonas / avisos
+async function listarZonas() {
+    return await listarColeccion("zonas");
+}
+
+// Revisa proyectos de Firestore que todavía no tienen 'notificadoZona', busca
+// a qué zona pertenece cada uno (por el campo 'municipio' del proyecto contra
+// la lista de municipios de cada zona) y le manda un correo SOLO a los
+// correos de esa zona -- no toca 'configuracion/general.correosDestino' (así
+// el envío general que ya hace la app móvil sigue funcionando en paralelo,
+// como se pidió, mientras se prueba este sistema nuevo).
+async function revisarProyectosPendientes() {
+    const [proyectos, zonas] = await Promise.all([listarColeccion("proyectos"), listarZonas()]);
+    const pendientes = proyectos.filter((p) => !p.notificadoZona);
+    let avisados = 0;
+    let sinZona = 0;
+
+    for (const p of pendientes) {
+        const municipioProyecto = normalizar(p.municipio as string);
+        const zona = zonas.find((z) =>
+            Array.isArray(z.municipios) && (z.municipios as string[]).some((m) => normalizar(m) === municipioProyecto));
+
+        if (!zona || !Array.isArray(zona.correos) || !zona.correos.length) {
+            sinZona++;
+            continue; // sin zona (o zona sin correos) -- se reintenta en el próximo chequeo, no se marca
+        }
+
+        const nombreProyecto = String(p.id);
+        const html = `
+            <div style="font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6">
+                <h2>Nuevo inventario sincronizado</h2>
+                <p><b>Proyecto:</b> ${nombreProyecto}</p>
+                <p><b>Funcionario:</b> ${p.nombreFuncionario || "—"} (${p.codigoFuncionario || "—"})</p>
+                <p><b>Municipio:</b> ${p.municipio || "—"}</p>
+                <p><b>Fecha:</b> ${p.fechaCreacion || "—"}</p>
+                <p style="margin-top:20px;color:#666;font-size:12px">Descargá las fotos completas desde el panel de Alumbrado Público.</p>
+            </div>`;
+
+        try {
+            await enviarCorreo(zona.correos as string[], `Inventario sincronizado -- ${nombreProyecto}`, html);
+            await escribirDoc(`proyectos/${nombreProyecto}`, { notificadoZona: true }, ["notificadoZona"]);
+            avisados++;
+        } catch (e) {
+            console.error(`No se pudo avisar por zona el proyecto ${nombreProyecto}:`, e);
+        }
+    }
+    return { revisados: pendientes.length, avisados, sinZona };
+}
+
 // =============================================================================
 Deno.serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: CABECERAS_CORS });
 
     try {
         const authHeader = req.headers.get("Authorization") ?? "";
-        const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            global: { headers: { Authorization: authHeader } },
-        });
 
-        const { data: { user } } = await supabaseAuth.auth.getUser();
-        if (!user) return jsonRespuesta({ error: "No autenticado." }, 401);
+        // El cron de Supabase (revisión automática de zonas cada 15 min) no
+        // tiene un admin humano logueado -- llama con la service role key
+        // directo, que solo puede tener quien ya tiene acceso total a este
+        // proyecto de Supabase (nunca llega al navegador). Cualquier otra
+        // llamada sigue exigiendo admin real, como siempre.
+        const esLlamadaInterna = SUPABASE_SERVICE_ROLE_KEY && authHeader === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
 
-        const { data: esAdmin } = await supabaseAuth.rpc("rpc_soy_admin");
-        if (!esAdmin) return jsonRespuesta({ error: "Esta cuenta no tiene permisos de administrador." }, 403);
+        if (!esLlamadaInterna) {
+            const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                global: { headers: { Authorization: authHeader } },
+            });
+            const { data: { user } } = await supabaseAuth.auth.getUser();
+            if (!user) return jsonRespuesta({ error: "No autenticado." }, 401);
+
+            const { data: esAdmin } = await supabaseAuth.rpc("rpc_soy_admin");
+            if (!esAdmin) return jsonRespuesta({ error: "Esta cuenta no tiene permisos de administrador." }, 403);
+        }
 
         const { accion, ...datos } = await req.json();
 
@@ -307,6 +406,32 @@ Deno.serve(async (req) => {
                     municipios: municipios || [], tiposPotencia: tiposPotencia || {},
                 }, ["correosDestino", "correoAdmin", "municipios", "tiposPotencia"]);
                 return jsonRespuesta({ ok: true });
+            }
+
+            // ------------------------------------------------------------------- zonas
+            case "listar_zonas": {
+                const zonas = await listarZonas();
+                return jsonRespuesta({ ok: true, zonas });
+            }
+            case "guardar_zona": {
+                const { idOriginal, id, nombre, municipios, correos } = datos;
+                if (!id || !nombre) return jsonRespuesta({ error: "Completá el nombre de la zona." }, 400);
+                const registro = { nombre, municipios: municipios || [], correos: correos || [] };
+                await escribirDoc(`zonas/${id}`, registro);
+                if (idOriginal && idOriginal !== id) await borrarDoc(`zonas/${idOriginal}`);
+                return jsonRespuesta({ ok: true });
+            }
+            case "borrar_zona": {
+                const { id } = datos;
+                await borrarDoc(`zonas/${id}`);
+                return jsonRespuesta({ ok: true });
+            }
+            // Disparada por el cron de Supabase cada 15 min (ver
+            // supabase_cron_zonas_alumbrado.sql) -- también se puede probar a
+            // mano desde el panel con el botón "Revisar ahora".
+            case "revisar_proyectos_pendientes": {
+                const resultado = await revisarProyectosPendientes();
+                return jsonRespuesta({ ok: true, ...resultado });
             }
 
             // -------------------------------------------------------------- proyectos
