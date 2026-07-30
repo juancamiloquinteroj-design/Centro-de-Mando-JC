@@ -159,6 +159,12 @@ let appExpandidaSlug = null;
 // aplicación" con este identificador EXACTO.
 const SLUG_ALUMBRADO = 'alumbrado_publico';
 
+function iconoAppHtml(a) {
+    return a.icono_url
+        ? `<img src="${escapeHtml(a.icono_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`
+        : '🧩';
+}
+
 function renderAplicaciones() {
     $('#apps-grid').innerHTML = apps.map((a, i) => {
         const misAccesos = accesos.filter((ac) => ac.app === a.slug);
@@ -168,26 +174,55 @@ function renderAplicaciones() {
             return `
             <div class="app-card" data-tilt-suave data-toggle-app="${a.slug}" style="animation-delay:${i * 60}ms">
                 <div class="app-card-cabecera">
-                    <div class="app-card-icono">🧩</div>
+                    <div class="app-card-icono">${iconoAppHtml(a)}</div>
                     <div class="app-card-titulos"><h3>${escapeHtml(a.nombre)}</h3></div>
                 </div>
             </div>`;
         }
         return `
         <div class="app-card app-card-expandida" style="animation-delay:${i * 60}ms">
-            <div class="app-card-cabecera" data-toggle-app="${a.slug}" title="Ocultar">
-                <div class="app-card-icono">🧩</div>
-                <div class="app-card-titulos">
+            <div class="app-card-cabecera">
+                <div class="app-card-icono app-card-icono-editable" data-cambiar-icono="${a.slug}" title="Cambiar ícono (PNG)">
+                    ${iconoAppHtml(a)}
+                    <span class="app-card-icono-lapiz">✎</span>
+                </div>
+                <div class="app-card-titulos" data-toggle-app="${a.slug}" style="cursor:pointer;">
                     <h3>${escapeHtml(a.nombre)}</h3>
                     <span class="app-card-slug">${escapeHtml(a.slug)}</span>
                 </div>
-                <span class="app-card-cerrar">Ocultar ▲</span>
+                <span class="app-card-cerrar" data-toggle-app="${a.slug}">Ocultar ▲</span>
             </div>
             ${a.slug === SLUG_ALUMBRADO ? panelAlumbrado() : panelUsuariosApp(a.slug, misAccesos)}
         </div>`;
     }).join('') || '<p class="grafica-vacia">Todavía no hay aplicaciones registradas.</p>';
 
     $$('#apps-grid .app-card:not(.app-card-expandida)').forEach((el) => aplicarTilt(el, 3));
+}
+
+async function subirIconoApp(slug) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png';
+    input.addEventListener('change', async () => {
+        const archivo = input.files[0];
+        if (!archivo) return;
+        const ruta = `${slug}.png`;
+        const { error: errSubida } = await supabase.storage.from('app-iconos').upload(ruta, archivo, {
+            contentType: 'image/png', upsert: true,
+        });
+        if (errSubida) { toast('No se pudo subir el ícono: ' + errSubida.message, 'error'); return; }
+
+        const { data: pub } = supabase.storage.from('app-iconos').getPublicUrl(ruta);
+        // ?v= al final para que el navegador no muestre la imagen vieja en caché
+        // cuando se reemplaza el ícono de la misma app.
+        const iconoUrl = `${pub.publicUrl}?v=${Date.now()}`;
+        const { error: errUpdate } = await supabase.from('apps').update({ icono_url: iconoUrl }).eq('slug', slug);
+        if (errUpdate) { toast('No se pudo guardar el ícono: ' + errUpdate.message, 'error'); return; }
+
+        toast('Ícono actualizado.');
+        await cargarTodo();
+    });
+    input.click();
 }
 
 function panelUsuariosApp(slug, misAccesos) {
@@ -252,13 +287,19 @@ function filaUsuarioApp(u, a, slug) {
                 </label>
             </td>
             <td class="col-borrar">
-                <button class="btn-icono" data-revocar="${u.correo}|${slug}" title="Revocar acceso a esta app">🗑</button>
-                <button class="btn-icono" data-borrar-cuenta="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button>
+                <button class="btn-icono btn-icono-peligro" data-revocar="${u.correo}|${slug}" title="Revocar acceso a esta app">🗑</button>
+                <button class="btn-icono btn-icono-peligro" data-borrar-cuenta="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button>
             </td>
         </tr>`;
 }
 
 $('#apps-grid').addEventListener('click', async (e) => {
+    // va primero: el botón de cambiar ícono vive DENTRO del área que también
+    // tiene data-toggle-app (la cabecera de la tarjeta expandida), así que hay
+    // que interceptarlo antes de que closest('[data-toggle-app]') lo agarre.
+    const cambiarIcono = e.target.closest('[data-cambiar-icono]');
+    if (cambiarIcono) { subirIconoApp(cambiarIcono.dataset.cambiarIcono); return; }
+
     const toggleApp = e.target.closest('[data-toggle-app]');
     if (toggleApp) {
         const slug = toggleApp.dataset.toggleApp;
@@ -342,7 +383,7 @@ $('#app-confirmar').addEventListener('click', async () => {
 // ------------------------------------------------------------------ carga de datos
 async function cargarTodo() {
     const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: sop }, { data: en }] = await Promise.all([
-        supabase.from('apps').select('slug,nombre').order('nombre'),
+        supabase.from('apps').select('slug,nombre,icono_url').order('nombre'),
         supabase.from('usuarios').select('correo,bloqueado,creado,requiere_cambio_clave').order('creado', { ascending: false }),
         supabase.from('accesos').select('correo,app,creado,expira'),
         supabase.from('logs_seguridad').select('*').order('creado', { ascending: false }).limit(200),
@@ -575,7 +616,7 @@ function renderTablaUsuarios() {
                 ? '<span class="tipo-tag tipo-login_fallido">Debe cambiarla</span>'
                 : '<span class="tipo-tag tipo-login_ok">OK</span>'}</td>
             <td class="col-fecha">${fechaCorta(u.creado)}</td>
-            <td class="col-borrar"><button class="btn-icono" data-borrar-usuario="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button></td>
+            <td class="col-borrar"><button class="btn-icono btn-icono-peligro" data-borrar-usuario="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button></td>
         </tr>`).join('');
 }
 $('#tbody-usuarios').addEventListener('change', async (e) => {
@@ -681,7 +722,7 @@ function renderTablaEnlaces() {
             <td class="col-url"><a href="${escapeHtml(en.url)}" target="_blank" rel="noopener">${escapeHtml(en.url)}</a></td>
             <td class="col-borrar">
                 <button class="btn-icono" data-editar-enlace="${en.id}" title="Editar">✎</button>
-                <button class="btn-icono" data-borrar-enlace="${en.id}" title="Borrar">🗑</button>
+                <button class="btn-icono btn-icono-peligro" data-borrar-enlace="${en.id}" title="Borrar">🗑</button>
             </td>
         </tr>`).join('');
 }
@@ -898,7 +939,7 @@ function panelAlumbrado() {
             <div id="alu-tab-actividad" class="alu-tab ${aluSubtabActiva === 'actividad' ? '' : 'oculto'}">
                 <div class="panel-head">
                     <h3>Actividad</h3>
-                    <button id="alu-btn-borrar-actividad" class="btn-secundario">Borrar todo</button>
+                    <button id="alu-btn-borrar-actividad" class="btn-secundario btn-secundario-peligro">Borrar todo</button>
                 </div>
                 <div class="tabla-wrap">
                     <table id="alu-tabla-actividad">
@@ -974,7 +1015,7 @@ async function cargarAluUsuarios() {
                 <td class="col-borrar">
                     <button class="btn-icono" data-editar-tecnico="${escapeHtml(u.id)}" title="Editar">✎</button>
                     <button class="btn-icono" data-bloquear-tecnico="${escapeHtml(u.id)}" data-activo="${activo}" title="${activo ? 'Bloquear' : 'Desbloquear'}">${activo ? '🔒' : '🔓'}</button>
-                    <button class="btn-icono" data-borrar-tecnico="${escapeHtml(u.id)}" title="Eliminar">🗑</button>
+                    <button class="btn-icono btn-icono-peligro" data-borrar-tecnico="${escapeHtml(u.id)}" title="Eliminar">🗑</button>
                 </td>
             </tr>`;
         }).join('');
@@ -1067,7 +1108,7 @@ async function cargarAluProyectos() {
                 <td>${escapeHtml(p.id)}</td>
                 <td>${escapeHtml(p.nombreFuncionario || '')} (${escapeHtml(p.codigoFuncionario || '')})</td>
                 <td class="col-fecha">${escapeHtml(p.fechaCreacion || '—')}</td>
-                <td class="col-borrar"><button class="btn-icono" data-borrar-proyecto="${escapeHtml(p.id)}" title="Borrar">🗑</button></td>
+                <td class="col-borrar"><button class="btn-icono btn-icono-peligro" data-borrar-proyecto="${escapeHtml(p.id)}" title="Borrar">🗑</button></td>
             </tr>`).join('');
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
@@ -1086,7 +1127,7 @@ async function cargarAluActividad() {
                 <td>${escapeHtml(l.accion || '')}</td>
                 <td>${escapeHtml(l.detalle || '—')}</td>
                 <td class="col-fecha">${l.fecha ? new Date(l.fecha).toLocaleString('es-CO') : '—'}</td>
-                <td class="col-borrar"><button class="btn-icono" data-borrar-log="${escapeHtml(l.id)}" title="Borrar">🗑</button></td>
+                <td class="col-borrar"><button class="btn-icono btn-icono-peligro" data-borrar-log="${escapeHtml(l.id)}" title="Borrar">🗑</button></td>
             </tr>`).join('');
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
