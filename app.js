@@ -865,19 +865,19 @@ function panelAlumbrado() {
                     <span>Correo administrador (recibe códigos de verificación)</span>
                     <input type="email" id="alu-correo-admin" placeholder="admin@cinco.com">
                 </label>
-                <label class="campo"><span>Correos destino (reciben reportes)</span></label>
-                <div id="alu-correos-lista" class="chips"></div>
+                <label class="campo"><span>Correos destino (reciben el Excel/PDF cuando un técnico sincroniza)</span></label>
+                <div id="alu-correos-lista" class="chips" style="max-width:none;"></div>
                 <div class="vig-inline" style="margin:10px 0 16px;">
                     <input type="email" id="alu-nuevo-correo" placeholder="agregar correo...">
                     <button class="btn-icono" id="alu-btn-agregar-correo" title="Agregar">+</button>
                 </div>
                 <label class="campo">
-                    <span>Municipios (separados por coma)</span>
-                    <input type="text" id="alu-municipios" placeholder="Neiva, Pitalito, Garzón">
+                    <span>Municipios (uno por línea, lista desplegable de la app)</span>
+                    <textarea id="alu-municipios" rows="8" placeholder="ACEVEDO&#10;AGRADO&#10;AIPE"></textarea>
                 </label>
                 <label class="campo">
-                    <span>Tipos de potencia (separados por coma)</span>
-                    <input type="text" id="alu-tipos-potencia" placeholder="70W, 100W, 150W">
+                    <span>Tipos y potencias de luminaria (JSON -- mismo formato que la app original)</span>
+                    <textarea id="alu-tipos-potencia" rows="10" placeholder='{"Mercurio": [125], "Ahorradores": [20, 25]}'></textarea>
                 </label>
                 <div class="modal-actions" style="justify-content:flex-start;">
                     <button id="alu-btn-guardar-config" class="btn-primario">Guardar configuración</button>
@@ -1023,8 +1023,10 @@ async function cargarAluConfiguracion() {
     try {
         const { configuracion } = await invocarAlumbrado('leer_configuracion');
         $('#alu-correo-admin').value = configuracion.correoAdmin || '';
-        $('#alu-municipios').value = (configuracion.municipios || []).join(', ');
-        $('#alu-tipos-potencia').value = (configuracion.tiposPotencia || []).join(', ');
+        // municipios: uno por línea (igual que la app original). tiposPotencia: objeto
+        // {categoría: [potencias]} -- se edita como JSON crudo, mismo formato de siempre.
+        $('#alu-municipios').value = (configuracion.municipios || []).join('\n');
+        $('#alu-tipos-potencia').value = JSON.stringify(configuracion.tiposPotencia || {}, null, 2);
         aluCorreosDestino = configuracion.correosDestino || [];
         pintarAluCorreos();
     } catch (e) {
@@ -1039,8 +1041,14 @@ function pintarAluCorreos() {
 async function guardarAluConfiguracion() {
     const msg = $('#alu-config-msg'); msg.textContent = '';
     const correoAdmin = $('#alu-correo-admin').value.trim();
-    const municipios = $('#alu-municipios').value.split(',').map((m) => m.trim()).filter(Boolean);
-    const tiposPotencia = $('#alu-tipos-potencia').value.split(',').map((t) => t.trim()).filter(Boolean);
+    const municipios = $('#alu-municipios').value.split('\n').map((m) => m.trim()).filter(Boolean);
+    let tiposPotencia;
+    try {
+        tiposPotencia = JSON.parse($('#alu-tipos-potencia').value.trim() || '{}');
+    } catch {
+        msg.textContent = 'El JSON de "Tipos y potencias" no es válido -- revisá comas/llaves.';
+        return;
+    }
     try {
         await invocarAlumbrado('guardar_configuracion', { correosDestino: aluCorreosDestino, correoAdmin, municipios, tiposPotencia });
         toast('Configuración guardada.');

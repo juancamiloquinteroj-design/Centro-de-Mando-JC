@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
             case "guardar_configuracion": {
                 const { correosDestino, correoAdmin, municipios, tiposPotencia } = datos;
                 await db.doc("configuracion/general").set(
-                    { correosDestino: correosDestino || [], correoAdmin: correoAdmin || "", municipios: municipios || [], tiposPotencia: tiposPotencia || [] },
+                    { correosDestino: correosDestino || [], correoAdmin: correoAdmin || "", municipios: municipios || [], tiposPotencia: tiposPotencia || {} },
                     { merge: true },
                 );
                 return jsonRespuesta({ ok: true });
