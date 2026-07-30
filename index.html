@@ -56,7 +56,6 @@
             <button class="nav-item" data-vista="aplicaciones"><span class="nav-icono">🧩</span> Aplicaciones</button>
             <button class="nav-item" data-vista="usuarios"><span class="nav-icono">👥</span> Usuarios</button>
             <button class="nav-item" data-vista="enlaces"><span class="nav-icono">🔗</span> Enlaces</button>
-            <button class="nav-item" data-vista="alumbrado"><span class="nav-icono">💡</span> Alumbrado Público</button>
             <button class="nav-item" data-vista="soporte"><span class="nav-icono">✉️</span> Soporte <span class="nav-badge oculto" id="badge-soporte">0</span></button>
             <button class="nav-item" data-vista="logs"><span class="nav-icono">🛡️</span> Seguridad</button>
         </nav>
@@ -155,100 +154,6 @@
                         <tbody id="tbody-enlaces"></tbody>
                     </table>
                     <p class="tabla-vacia oculto" id="enlaces-vacio">Todavía no hay enlaces cargados.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ---------- ALUMBRADO PÚBLICO ---------- -->
-        <section id="seccion-alumbrado" class="seccion-vista oculto">
-            <div class="subtabs">
-                <button class="subtab-item activo" data-subtab-alumbrado="dashboard">Dashboard</button>
-                <button class="subtab-item" data-subtab-alumbrado="usuarios">Usuarios técnicos</button>
-                <button class="subtab-item" data-subtab-alumbrado="configuracion">Configuración</button>
-                <button class="subtab-item" data-subtab-alumbrado="proyectos">Proyectos</button>
-                <button class="subtab-item" data-subtab-alumbrado="actividad">Actividad</button>
-            </div>
-
-            <div id="alu-tab-dashboard" class="alu-tab">
-                <div class="stats" id="alu-kpis"></div>
-            </div>
-
-            <div id="alu-tab-usuarios" class="alu-tab oculto">
-                <div class="panel-card" data-tilt-suave>
-                    <div class="panel-head">
-                        <h2>Usuarios técnicos (app móvil de campo)</h2>
-                        <div class="panel-actions">
-                            <button id="alu-btn-crear-tecnico" class="btn-primario">+ Crear técnico</button>
-                        </div>
-                    </div>
-                    <p class="nota-panel">Estas cuentas las usa la app móvil de los técnicos en campo (código +
-                        contraseña). No tienen relación con los usuarios de la suite.</p>
-                    <div class="tabla-wrap">
-                        <table id="alu-tabla-usuarios">
-                            <thead><tr><th>Código</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
-                            <tbody id="alu-tbody-usuarios"></tbody>
-                        </table>
-                        <p class="tabla-vacia oculto" id="alu-usuarios-vacio">Todavía no hay técnicos registrados.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div id="alu-tab-configuracion" class="alu-tab oculto">
-                <div class="panel-card" data-tilt-suave>
-                    <h2>Configuración de correos y catálogos</h2>
-                    <label class="campo">
-                        <span>Correo administrador (recibe códigos de verificación)</span>
-                        <input type="email" id="alu-correo-admin" placeholder="admin@cinco.com">
-                    </label>
-                    <label class="campo"><span>Correos destino (reciben reportes)</span></label>
-                    <div id="alu-correos-lista" class="chips"></div>
-                    <div class="vig-inline" style="margin-bottom:16px;">
-                        <input type="email" id="alu-nuevo-correo" placeholder="agregar correo...">
-                        <button class="btn-icono" id="alu-btn-agregar-correo" title="Agregar">+</button>
-                    </div>
-                    <label class="campo">
-                        <span>Municipios (separados por coma)</span>
-                        <input type="text" id="alu-municipios" placeholder="Neiva, Pitalito, Garzón">
-                    </label>
-                    <label class="campo">
-                        <span>Tipos de potencia (separados por coma)</span>
-                        <input type="text" id="alu-tipos-potencia" placeholder="70W, 100W, 150W">
-                    </label>
-                    <div class="modal-actions" style="justify-content:flex-start;">
-                        <button id="alu-btn-guardar-config" class="btn-primario">Guardar configuración</button>
-                    </div>
-                    <p class="modal-msg" id="alu-config-msg"></p>
-                </div>
-            </div>
-
-            <div id="alu-tab-proyectos" class="alu-tab oculto">
-                <div class="panel-card" data-tilt-suave>
-                    <h2>Proyectos sincronizados</h2>
-                    <div class="tabla-wrap">
-                        <table id="alu-tabla-proyectos">
-                            <thead><tr><th>Proyecto</th><th>Funcionario</th><th>Creado</th><th></th></tr></thead>
-                            <tbody id="alu-tbody-proyectos"></tbody>
-                        </table>
-                        <p class="tabla-vacia oculto" id="alu-proyectos-vacio">No hay proyectos sincronizados todavía.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div id="alu-tab-actividad" class="alu-tab oculto">
-                <div class="panel-card" data-tilt-suave>
-                    <div class="panel-head">
-                        <h2>Actividad</h2>
-                        <div class="panel-actions">
-                            <button id="alu-btn-borrar-actividad" class="btn-secundario">Borrar todo</button>
-                        </div>
-                    </div>
-                    <div class="tabla-wrap">
-                        <table id="alu-tabla-actividad">
-                            <thead><tr><th>Acción</th><th>Detalle</th><th>Cuándo</th><th></th></tr></thead>
-                            <tbody id="alu-tbody-actividad"></tbody>
-                        </table>
-                        <p class="tabla-vacia oculto" id="alu-actividad-vacio">Sin actividad todavía.</p>
-                    </div>
                 </div>
             </div>
         </section>

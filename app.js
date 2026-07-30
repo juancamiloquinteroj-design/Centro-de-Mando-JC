@@ -132,7 +132,6 @@ const TITULOS = {
     aplicaciones: ['Aplicaciones', 'Una tarjeta por cada app de la suite'],
     usuarios: ['Usuarios', 'Crea cuentas nuevas y mandales la bienvenida'],
     enlaces: ['Enlaces', 'Links de descarga que se incluyen en el correo de bienvenida'],
-    alumbrado: ['Alumbrado Público', 'Inventario de luminarias -- backend propio en Firebase'],
     soporte: ['Soporte', 'Mensajes de ayuda enviados desde las apps'],
     logs: ['Seguridad', 'Actividad y eventos de todas las apps'],
 };
@@ -146,13 +145,19 @@ function activarSeccion(nombre) {
     if (nombre === 'aplicaciones') renderAplicaciones();
     if (nombre === 'usuarios') renderTablaUsuarios();
     if (nombre === 'enlaces') renderTablaEnlaces();
-    if (nombre === 'alumbrado') activarSubtabAlumbrado(aluSubtabActiva);
     if (nombre === 'logs') renderTablaLogsCompleta();
     if (nombre === 'soporte') renderTablaSoporte();
 }
 
 // -------------------------------------------------------------- aplicaciones
 let appExpandidaSlug = null;
+
+// Alumbrado Público no usa el sistema de accesos de la suite (tiene su propio
+// backend en Firebase) -- en vez del panel de "otorgar acceso" genérico, su
+// tarjeta expandida muestra la gestión completa (ver panelAlumbrado() más
+// abajo). Para que enganche, hay que registrar la app desde "+ Registrar
+// aplicación" con este identificador EXACTO.
+const SLUG_ALUMBRADO = 'alumbrado_publico';
 
 function renderAplicaciones() {
     $('#apps-grid').innerHTML = apps.map((a, i) => {
@@ -178,7 +183,7 @@ function renderAplicaciones() {
                 </div>
                 <span class="app-card-cerrar">Ocultar ▲</span>
             </div>
-            ${panelUsuariosApp(a.slug, misAccesos)}
+            ${a.slug === SLUG_ALUMBRADO ? panelAlumbrado() : panelUsuariosApp(a.slug, misAccesos)}
         </div>`;
     }).join('') || '<p class="grafica-vacia">Todavía no hay aplicaciones registradas.</p>';
 
@@ -259,6 +264,7 @@ $('#apps-grid').addEventListener('click', async (e) => {
         const slug = toggleApp.dataset.toggleApp;
         appExpandidaSlug = appExpandidaSlug === slug ? null : slug;
         renderAplicaciones();
+        if (appExpandidaSlug === SLUG_ALUMBRADO) activarSubtabAlumbrado(aluSubtabActiva);
         return;
     }
     const ot = e.target.closest('[data-otorgar-app]');
@@ -811,13 +817,98 @@ $('#sop-enviar-correo').addEventListener('click', async () => {
 });
 
 // ------------------------------------------------------------------ alumbrado público
-// Todo esto pasa por la Edge Function 'alumbrado', que habla con el Firebase
-// de esa app (Firestore/Storage) del lado del servidor -- ver
-// edge-function-alumbrado.ts. Nunca se toca Firebase directo desde acá.
+// Vive DENTRO de la tarjeta expandida de "Aplicaciones" (ver SLUG_ALUMBRADO
+// más arriba), no como sección propia -- por eso todo el HTML se arma en
+// panelAlumbrado() como string, y los clicks se escuchan por delegación sobre
+// #apps-grid (el contenedor NO se destruye; el markup de adentro sí, cada vez
+// que se re-renderiza). Nada acá toca Firebase directo: todo pasa por la Edge
+// Function 'alumbrado' -- ver edge-function-alumbrado.ts.
 async function invocarAlumbrado(accion, datos = {}) {
     const { data, error } = await supabase.functions.invoke('alumbrado', { body: { accion, ...datos } });
     if (error || data?.error) throw new Error(data?.error || error.message);
     return data;
+}
+
+function panelAlumbrado() {
+    return `
+        <div class="app-panel alu-panel">
+            <div class="subtabs">
+                <button class="subtab-item ${aluSubtabActiva === 'dashboard' ? 'activo' : ''}" data-subtab-alumbrado="dashboard">Dashboard</button>
+                <button class="subtab-item ${aluSubtabActiva === 'usuarios' ? 'activo' : ''}" data-subtab-alumbrado="usuarios">Usuarios técnicos</button>
+                <button class="subtab-item ${aluSubtabActiva === 'configuracion' ? 'activo' : ''}" data-subtab-alumbrado="configuracion">Configuración</button>
+                <button class="subtab-item ${aluSubtabActiva === 'proyectos' ? 'activo' : ''}" data-subtab-alumbrado="proyectos">Proyectos</button>
+                <button class="subtab-item ${aluSubtabActiva === 'actividad' ? 'activo' : ''}" data-subtab-alumbrado="actividad">Actividad</button>
+            </div>
+
+            <div id="alu-tab-dashboard" class="alu-tab ${aluSubtabActiva === 'dashboard' ? '' : 'oculto'}">
+                <div class="stats" id="alu-kpis"></div>
+            </div>
+
+            <div id="alu-tab-usuarios" class="alu-tab ${aluSubtabActiva === 'usuarios' ? '' : 'oculto'}">
+                <div class="panel-head">
+                    <h3>Usuarios técnicos (app móvil de campo)</h3>
+                    <button id="alu-btn-crear-tecnico" class="btn-primario">+ Crear técnico</button>
+                </div>
+                <p class="nota-panel">Estas cuentas las usa la app móvil de los técnicos en campo (código +
+                    contraseña). No tienen relación con los usuarios de la suite.</p>
+                <div class="tabla-wrap">
+                    <table id="alu-tabla-usuarios">
+                        <thead><tr><th>Código</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+                        <tbody id="alu-tbody-usuarios"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="alu-usuarios-vacio">Todavía no hay técnicos registrados.</p>
+                </div>
+            </div>
+
+            <div id="alu-tab-configuracion" class="alu-tab ${aluSubtabActiva === 'configuracion' ? '' : 'oculto'}">
+                <label class="campo">
+                    <span>Correo administrador (recibe códigos de verificación)</span>
+                    <input type="email" id="alu-correo-admin" placeholder="admin@cinco.com">
+                </label>
+                <label class="campo"><span>Correos destino (reciben reportes)</span></label>
+                <div id="alu-correos-lista" class="chips"></div>
+                <div class="vig-inline" style="margin:10px 0 16px;">
+                    <input type="email" id="alu-nuevo-correo" placeholder="agregar correo...">
+                    <button class="btn-icono" id="alu-btn-agregar-correo" title="Agregar">+</button>
+                </div>
+                <label class="campo">
+                    <span>Municipios (separados por coma)</span>
+                    <input type="text" id="alu-municipios" placeholder="Neiva, Pitalito, Garzón">
+                </label>
+                <label class="campo">
+                    <span>Tipos de potencia (separados por coma)</span>
+                    <input type="text" id="alu-tipos-potencia" placeholder="70W, 100W, 150W">
+                </label>
+                <div class="modal-actions" style="justify-content:flex-start;">
+                    <button id="alu-btn-guardar-config" class="btn-primario">Guardar configuración</button>
+                </div>
+                <p class="modal-msg" id="alu-config-msg"></p>
+            </div>
+
+            <div id="alu-tab-proyectos" class="alu-tab ${aluSubtabActiva === 'proyectos' ? '' : 'oculto'}">
+                <div class="tabla-wrap">
+                    <table id="alu-tabla-proyectos">
+                        <thead><tr><th>Proyecto</th><th>Funcionario</th><th>Creado</th><th></th></tr></thead>
+                        <tbody id="alu-tbody-proyectos"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="alu-proyectos-vacio">No hay proyectos sincronizados todavía.</p>
+                </div>
+            </div>
+
+            <div id="alu-tab-actividad" class="alu-tab ${aluSubtabActiva === 'actividad' ? '' : 'oculto'}">
+                <div class="panel-head">
+                    <h3>Actividad</h3>
+                    <button id="alu-btn-borrar-actividad" class="btn-secundario">Borrar todo</button>
+                </div>
+                <div class="tabla-wrap">
+                    <table id="alu-tabla-actividad">
+                        <thead><tr><th>Acción</th><th>Detalle</th><th>Cuándo</th><th></th></tr></thead>
+                        <tbody id="alu-tbody-actividad"></tbody>
+                    </table>
+                    <p class="tabla-vacia oculto" id="alu-actividad-vacio">Sin actividad todavía.</p>
+                </div>
+            </div>
+        </div>`;
 }
 
 let aluSubtabActiva = 'dashboard';
@@ -832,9 +923,6 @@ function activarSubtabAlumbrado(nombre) {
     if (nombre === 'proyectos') cargarAluProyectos();
     if (nombre === 'actividad') cargarAluActividad();
 }
-$$('[data-subtab-alumbrado]').forEach((btn) => {
-    btn.addEventListener('click', () => activarSubtabAlumbrado(btn.dataset.subtabAlumbrado));
-});
 
 async function cargarAluDashboard() {
     const cont = $('#alu-kpis');
@@ -894,33 +982,6 @@ async function cargarAluUsuarios() {
         tbody.innerHTML = `<tr><td colspan="6">Error: ${escapeHtml(e.message)}</td></tr>`;
     }
 }
-$('#alu-tbody-usuarios').addEventListener('click', async (e) => {
-    const editar = e.target.closest('[data-editar-tecnico]');
-    if (editar) { abrirModalTecnico(aluUsuariosCache.find((u) => u.id === editar.dataset.editarTecnico)); return; }
-
-    const bloquear = e.target.closest('[data-bloquear-tecnico]');
-    if (bloquear) {
-        const codigo = bloquear.dataset.bloquearTecnico;
-        const activoActual = bloquear.dataset.activo === 'true';
-        try {
-            await invocarAlumbrado('alternar_bloqueo_usuario', { codigo, activoActual });
-            toast(activoActual ? `"${codigo}" bloqueado.` : `"${codigo}" desbloqueado.`);
-            await cargarAluUsuarios();
-        } catch (err) { toast('No se pudo actualizar: ' + err.message, 'error'); }
-        return;
-    }
-
-    const borrar = e.target.closest('[data-borrar-tecnico]');
-    if (borrar) {
-        const codigo = borrar.dataset.borrarTecnico;
-        if (!confirm(`¿Eliminar el técnico "${codigo}"? Perderá acceso a la app móvil en su próxima sincronización.`)) return;
-        try {
-            await invocarAlumbrado('borrar_usuario', { codigo });
-            toast(`Técnico "${codigo}" eliminado.`);
-            await cargarAluUsuarios();
-        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
-    }
-});
 
 function abrirModalTecnico(u = null) {
     tecnicoEditando = u;
@@ -932,7 +993,6 @@ function abrirModalTecnico(u = null) {
     $('#tec-msg').textContent = '';
     $('#modal-tecnico').classList.remove('oculto');
 }
-$('#alu-btn-crear-tecnico').addEventListener('click', () => abrirModalTecnico());
 $('#tec-cancelar').addEventListener('click', () => $('#modal-tecnico').classList.add('oculto'));
 $('#modal-tecnico').addEventListener('click', (e) => { if (e.target.id === 'modal-tecnico') $('#modal-tecnico').classList.add('oculto'); });
 
@@ -976,21 +1036,7 @@ function pintarAluCorreos() {
         <span class="chip">${escapeHtml(c)} <button class="chip-x" data-quitar-correo="${escapeHtml(c)}" title="Quitar">×</button></span>
     `).join('') || '<p class="grafica-vacia">Sin correos destino todavía.</p>';
 }
-$('#alu-correos-lista').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-quitar-correo]');
-    if (!btn) return;
-    aluCorreosDestino = aluCorreosDestino.filter((c) => c !== btn.dataset.quitarCorreo);
-    pintarAluCorreos();
-});
-$('#alu-btn-agregar-correo').addEventListener('click', () => {
-    const input = $('#alu-nuevo-correo');
-    const correo = input.value.trim();
-    if (!correo || !correo.includes('@') || aluCorreosDestino.includes(correo)) { input.value = ''; return; }
-    aluCorreosDestino.push(correo);
-    input.value = '';
-    pintarAluCorreos();
-});
-$('#alu-btn-guardar-config').addEventListener('click', async () => {
+async function guardarAluConfiguracion() {
     const msg = $('#alu-config-msg'); msg.textContent = '';
     const correoAdmin = $('#alu-correo-admin').value.trim();
     const municipios = $('#alu-municipios').value.split(',').map((m) => m.trim()).filter(Boolean);
@@ -999,7 +1045,7 @@ $('#alu-btn-guardar-config').addEventListener('click', async () => {
         await invocarAlumbrado('guardar_configuracion', { correosDestino: aluCorreosDestino, correoAdmin, municipios, tiposPotencia });
         toast('Configuración guardada.');
     } catch (e) { msg.textContent = 'No se pudo guardar: ' + e.message; }
-});
+}
 
 // -------- proyectos sincronizados
 async function cargarAluProyectos() {
@@ -1019,17 +1065,6 @@ async function cargarAluProyectos() {
         tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
     }
 }
-$('#alu-tbody-proyectos').addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-borrar-proyecto]');
-    if (!btn) return;
-    const nombreProyecto = btn.dataset.borrarProyecto;
-    if (!confirm(`¿Borrar el proyecto "${nombreProyecto}" y sus fotos? Esto no se puede deshacer.`)) return;
-    try {
-        await invocarAlumbrado('borrar_proyecto', { nombreProyecto });
-        toast('Proyecto borrado.');
-        await cargarAluProyectos();
-    } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
-});
 
 // -------- actividad
 async function cargarAluActividad() {
@@ -1049,21 +1084,91 @@ async function cargarAluActividad() {
         tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
     }
 }
-$('#alu-tbody-actividad').addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-borrar-log]');
-    if (!btn) return;
-    try {
-        await invocarAlumbrado('borrar_log', { id: btn.dataset.borrarLog });
-        await cargarAluActividad();
-    } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
-});
-$('#alu-btn-borrar-actividad').addEventListener('click', async () => {
-    if (!confirm('¿Borrar TODA la actividad registrada? Esto no se puede deshacer.')) return;
-    try {
-        await invocarAlumbrado('borrar_toda_actividad');
-        toast('Actividad borrada.');
-        await cargarAluActividad();
-    } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+// -------- clicks del panel de Alumbrado, todos delegados sobre #apps-grid
+// (el markup de panelAlumbrado() se recrea en cada renderAplicaciones(), así
+// que un listener puesto directo sobre un botón de adentro se perdería en el
+// próximo repintado -- ver comentario al inicio de esta sección).
+$('#apps-grid').addEventListener('click', async (e) => {
+    const subtab = e.target.closest('[data-subtab-alumbrado]');
+    if (subtab) { activarSubtabAlumbrado(subtab.dataset.subtabAlumbrado); return; }
+
+    if (e.target.closest('#alu-btn-crear-tecnico')) { abrirModalTecnico(); return; }
+
+    const editarTec = e.target.closest('[data-editar-tecnico]');
+    if (editarTec) { abrirModalTecnico(aluUsuariosCache.find((u) => u.id === editarTec.dataset.editarTecnico)); return; }
+
+    const bloquearTec = e.target.closest('[data-bloquear-tecnico]');
+    if (bloquearTec) {
+        const codigo = bloquearTec.dataset.bloquearTecnico;
+        const activoActual = bloquearTec.dataset.activo === 'true';
+        try {
+            await invocarAlumbrado('alternar_bloqueo_usuario', { codigo, activoActual });
+            toast(activoActual ? `"${codigo}" bloqueado.` : `"${codigo}" desbloqueado.`);
+            await cargarAluUsuarios();
+        } catch (err) { toast('No se pudo actualizar: ' + err.message, 'error'); }
+        return;
+    }
+
+    const borrarTec = e.target.closest('[data-borrar-tecnico]');
+    if (borrarTec) {
+        const codigo = borrarTec.dataset.borrarTecnico;
+        if (!confirm(`¿Eliminar el técnico "${codigo}"? Perderá acceso a la app móvil en su próxima sincronización.`)) return;
+        try {
+            await invocarAlumbrado('borrar_usuario', { codigo });
+            toast(`Técnico "${codigo}" eliminado.`);
+            await cargarAluUsuarios();
+        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+        return;
+    }
+
+    const quitarCorreo = e.target.closest('[data-quitar-correo]');
+    if (quitarCorreo) {
+        aluCorreosDestino = aluCorreosDestino.filter((c) => c !== quitarCorreo.dataset.quitarCorreo);
+        pintarAluCorreos();
+        return;
+    }
+
+    if (e.target.closest('#alu-btn-agregar-correo')) {
+        const input = $('#alu-nuevo-correo');
+        const correo = input.value.trim();
+        if (!correo || !correo.includes('@') || aluCorreosDestino.includes(correo)) { input.value = ''; return; }
+        aluCorreosDestino.push(correo);
+        input.value = '';
+        pintarAluCorreos();
+        return;
+    }
+
+    if (e.target.closest('#alu-btn-guardar-config')) { await guardarAluConfiguracion(); return; }
+
+    const borrarProyecto = e.target.closest('[data-borrar-proyecto]');
+    if (borrarProyecto) {
+        const nombreProyecto = borrarProyecto.dataset.borrarProyecto;
+        if (!confirm(`¿Borrar el proyecto "${nombreProyecto}" y sus fotos? Esto no se puede deshacer.`)) return;
+        try {
+            await invocarAlumbrado('borrar_proyecto', { nombreProyecto });
+            toast('Proyecto borrado.');
+            await cargarAluProyectos();
+        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+        return;
+    }
+
+    const borrarLog = e.target.closest('[data-borrar-log]');
+    if (borrarLog) {
+        try {
+            await invocarAlumbrado('borrar_log', { id: borrarLog.dataset.borrarLog });
+            await cargarAluActividad();
+        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+        return;
+    }
+
+    if (e.target.closest('#alu-btn-borrar-actividad')) {
+        if (!confirm('¿Borrar TODA la actividad registrada? Esto no se puede deshacer.')) return;
+        try {
+            await invocarAlumbrado('borrar_toda_actividad');
+            toast('Actividad borrada.');
+            await cargarAluActividad();
+        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+    }
 });
 
 intentarSesion();

@@ -341,6 +341,7 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
 
 .panel-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
 .panel-head h2 { font-size: 16px; margin: 0; }
+.panel-head h3 { font-size: 14.5px; margin: 0; }
 .panel-actions { display: flex; gap: 10px; align-items: center; }
 #buscar { width: 220px; }
 .nota-panel { font-size: 12px; color: var(--text3); margin: -8px 0 16px; }
