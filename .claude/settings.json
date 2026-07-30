@@ -3,7 +3,12 @@
     "allow": [
       "Read(//d/1. Contrato CINCO 2026/3. Desarrollos/**)",
       "Read(//d/1. Contrato CINCO 2026/3. Desarrollos/2. Apliaciones Perdidas tecnicas/**)",
-      "Read(//d/1. Contrato CINCO 2026/**)"
+      "Read(//d/1. Contrato CINCO 2026/**)",
+      "PowerShell(gh --version 2>&1)",
+      "PowerShell(gh auth status 2>&1)",
+      "WebFetch(domain:juancamiloquinteroj-design.github.io)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

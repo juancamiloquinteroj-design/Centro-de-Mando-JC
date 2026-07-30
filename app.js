@@ -132,6 +132,7 @@ const TITULOS = {
     aplicaciones: ['Aplicaciones', 'Una tarjeta por cada app de la suite'],
     usuarios: ['Usuarios', 'Crea cuentas nuevas y mandales la bienvenida'],
     enlaces: ['Enlaces', 'Links de descarga que se incluyen en el correo de bienvenida'],
+    alumbrado: ['Alumbrado Público', 'Inventario de luminarias -- backend propio en Firebase'],
     soporte: ['Soporte', 'Mensajes de ayuda enviados desde las apps'],
     logs: ['Seguridad', 'Actividad y eventos de todas las apps'],
 };
@@ -145,6 +146,7 @@ function activarSeccion(nombre) {
     if (nombre === 'aplicaciones') renderAplicaciones();
     if (nombre === 'usuarios') renderTablaUsuarios();
     if (nombre === 'enlaces') renderTablaEnlaces();
+    if (nombre === 'alumbrado') activarSubtabAlumbrado(aluSubtabActiva);
     if (nombre === 'logs') renderTablaLogsCompleta();
     if (nombre === 'soporte') renderTablaSoporte();
 }
@@ -806,6 +808,262 @@ $('#sop-enviar-correo').addEventListener('click', async () => {
     $('#modal-soporte').classList.add('oculto');
     await cargarTodo();
     renderTablaSoporte();
+});
+
+// ------------------------------------------------------------------ alumbrado público
+// Todo esto pasa por la Edge Function 'alumbrado', que habla con el Firebase
+// de esa app (Firestore/Storage) del lado del servidor -- ver
+// edge-function-alumbrado.ts. Nunca se toca Firebase directo desde acá.
+async function invocarAlumbrado(accion, datos = {}) {
+    const { data, error } = await supabase.functions.invoke('alumbrado', { body: { accion, ...datos } });
+    if (error || data?.error) throw new Error(data?.error || error.message);
+    return data;
+}
+
+let aluSubtabActiva = 'dashboard';
+function activarSubtabAlumbrado(nombre) {
+    aluSubtabActiva = nombre;
+    $$('.alu-tab').forEach((t) => t.classList.add('oculto'));
+    $(`#alu-tab-${nombre}`)?.classList.remove('oculto');
+    $$('[data-subtab-alumbrado]').forEach((b) => b.classList.toggle('activo', b.dataset.subtabAlumbrado === nombre));
+    if (nombre === 'dashboard') cargarAluDashboard();
+    if (nombre === 'usuarios') cargarAluUsuarios();
+    if (nombre === 'configuracion') cargarAluConfiguracion();
+    if (nombre === 'proyectos') cargarAluProyectos();
+    if (nombre === 'actividad') cargarAluActividad();
+}
+$$('[data-subtab-alumbrado]').forEach((btn) => {
+    btn.addEventListener('click', () => activarSubtabAlumbrado(btn.dataset.subtabAlumbrado));
+});
+
+async function cargarAluDashboard() {
+    const cont = $('#alu-kpis');
+    cont.innerHTML = '<p class="grafica-vacia">Cargando…</p>';
+    try {
+        const { kpis } = await invocarAlumbrado('dashboard_kpis');
+        cont.innerHTML = '';
+        [
+            { icono: '👷', valor: kpis.usuarios, label: 'Técnicos registrados' },
+            { icono: '📁', valor: kpis.proyectos, label: 'Proyectos sincronizados' },
+            { icono: '📍', valor: kpis.ubicaciones, label: 'Ubicaciones registradas' },
+        ].forEach((it, i) => {
+            const div = document.createElement('div');
+            div.className = 'stat-card';
+            div.style.animationDelay = `${i * 60}ms`;
+            div.innerHTML = `<span class="stat-icono">${it.icono}</span>
+                <span class="stat-valor">${it.valor}</span>
+                <span class="stat-label">${it.label}</span>`;
+            cont.appendChild(div);
+            aplicarTilt(div, 4);
+        });
+    } catch (e) {
+        cont.innerHTML = `<p class="grafica-vacia">No se pudo cargar: ${escapeHtml(e.message)}</p>`;
+    }
+}
+
+// -------- usuarios técnicos (credenciales de la app móvil de campo)
+let aluUsuariosCache = [];
+let tecnicoEditando = null;
+
+function etiquetaRolTecnico(r) { return { admin: 'Administrador', operador: 'Operador' }[r] || r || 'Técnico'; }
+
+async function cargarAluUsuarios() {
+    const tbody = $('#alu-tbody-usuarios');
+    tbody.innerHTML = '<tr><td colspan="6">Cargando…</td></tr>';
+    try {
+        const { usuarios } = await invocarAlumbrado('listar_usuarios');
+        aluUsuariosCache = usuarios || [];
+        $('#alu-usuarios-vacio').classList.toggle('oculto', aluUsuariosCache.length > 0);
+        tbody.innerHTML = aluUsuariosCache.map((u) => {
+            const activo = u.activo !== false;
+            return `
+            <tr>
+                <td>${escapeHtml(u.id)}</td>
+                <td>${escapeHtml(u.nombre || '')}</td>
+                <td>${escapeHtml(u.correo || '')}</td>
+                <td><span class="chip">${escapeHtml(etiquetaRolTecnico(u.rol))}</span></td>
+                <td><span class="tipo-tag ${activo ? 'tipo-login_ok' : 'tipo-login_fallido'}">${activo ? 'Activo' : 'Bloqueado'}</span></td>
+                <td class="col-borrar">
+                    <button class="btn-icono" data-editar-tecnico="${escapeHtml(u.id)}" title="Editar">✎</button>
+                    <button class="btn-icono" data-bloquear-tecnico="${escapeHtml(u.id)}" data-activo="${activo}" title="${activo ? 'Bloquear' : 'Desbloquear'}">${activo ? '🔒' : '🔓'}</button>
+                    <button class="btn-icono" data-borrar-tecnico="${escapeHtml(u.id)}" title="Eliminar">🗑</button>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6">Error: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+$('#alu-tbody-usuarios').addEventListener('click', async (e) => {
+    const editar = e.target.closest('[data-editar-tecnico]');
+    if (editar) { abrirModalTecnico(aluUsuariosCache.find((u) => u.id === editar.dataset.editarTecnico)); return; }
+
+    const bloquear = e.target.closest('[data-bloquear-tecnico]');
+    if (bloquear) {
+        const codigo = bloquear.dataset.bloquearTecnico;
+        const activoActual = bloquear.dataset.activo === 'true';
+        try {
+            await invocarAlumbrado('alternar_bloqueo_usuario', { codigo, activoActual });
+            toast(activoActual ? `"${codigo}" bloqueado.` : `"${codigo}" desbloqueado.`);
+            await cargarAluUsuarios();
+        } catch (err) { toast('No se pudo actualizar: ' + err.message, 'error'); }
+        return;
+    }
+
+    const borrar = e.target.closest('[data-borrar-tecnico]');
+    if (borrar) {
+        const codigo = borrar.dataset.borrarTecnico;
+        if (!confirm(`¿Eliminar el técnico "${codigo}"? Perderá acceso a la app móvil en su próxima sincronización.`)) return;
+        try {
+            await invocarAlumbrado('borrar_usuario', { codigo });
+            toast(`Técnico "${codigo}" eliminado.`);
+            await cargarAluUsuarios();
+        } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+    }
+});
+
+function abrirModalTecnico(u = null) {
+    tecnicoEditando = u;
+    $('#tec-codigo').value = u?.id || '';
+    $('#tec-nombre').value = u?.nombre || '';
+    $('#tec-correo').value = u?.correo || '';
+    $('#tec-contrasena').value = u?.contrasena || '';
+    $('#tec-rol').value = u?.rol || 'operador';
+    $('#tec-msg').textContent = '';
+    $('#modal-tecnico').classList.remove('oculto');
+}
+$('#alu-btn-crear-tecnico').addEventListener('click', () => abrirModalTecnico());
+$('#tec-cancelar').addEventListener('click', () => $('#modal-tecnico').classList.add('oculto'));
+$('#modal-tecnico').addEventListener('click', (e) => { if (e.target.id === 'modal-tecnico') $('#modal-tecnico').classList.add('oculto'); });
+
+$('#tec-confirmar').addEventListener('click', async () => {
+    const codigo = $('#tec-codigo').value.trim();
+    const nombre = $('#tec-nombre').value.trim();
+    const correo = $('#tec-correo').value.trim();
+    const contrasena = $('#tec-contrasena').value.trim();
+    const rol = $('#tec-rol').value;
+    const msg = $('#tec-msg');
+    if (!codigo || !nombre || !correo || !contrasena) { msg.textContent = 'Completá todos los campos.'; return; }
+    try {
+        await invocarAlumbrado('guardar_usuario', {
+            codigoOriginal: tecnicoEditando?.id || '', codigo, nombre, correo, contrasena, rol,
+            activo: tecnicoEditando ? tecnicoEditando.activo !== false : true,
+        });
+        toast('Técnico guardado.');
+        $('#modal-tecnico').classList.add('oculto');
+        await cargarAluUsuarios();
+    } catch (err) { msg.textContent = 'No se pudo guardar: ' + err.message; }
+});
+
+// -------- configuración (correos y catálogos)
+let aluCorreosDestino = [];
+
+async function cargarAluConfiguracion() {
+    const msg = $('#alu-config-msg'); msg.textContent = '';
+    try {
+        const { configuracion } = await invocarAlumbrado('leer_configuracion');
+        $('#alu-correo-admin').value = configuracion.correoAdmin || '';
+        $('#alu-municipios').value = (configuracion.municipios || []).join(', ');
+        $('#alu-tipos-potencia').value = (configuracion.tiposPotencia || []).join(', ');
+        aluCorreosDestino = configuracion.correosDestino || [];
+        pintarAluCorreos();
+    } catch (e) {
+        msg.textContent = 'No se pudo cargar: ' + e.message;
+    }
+}
+function pintarAluCorreos() {
+    $('#alu-correos-lista').innerHTML = aluCorreosDestino.map((c) => `
+        <span class="chip">${escapeHtml(c)} <button class="chip-x" data-quitar-correo="${escapeHtml(c)}" title="Quitar">×</button></span>
+    `).join('') || '<p class="grafica-vacia">Sin correos destino todavía.</p>';
+}
+$('#alu-correos-lista').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-quitar-correo]');
+    if (!btn) return;
+    aluCorreosDestino = aluCorreosDestino.filter((c) => c !== btn.dataset.quitarCorreo);
+    pintarAluCorreos();
+});
+$('#alu-btn-agregar-correo').addEventListener('click', () => {
+    const input = $('#alu-nuevo-correo');
+    const correo = input.value.trim();
+    if (!correo || !correo.includes('@') || aluCorreosDestino.includes(correo)) { input.value = ''; return; }
+    aluCorreosDestino.push(correo);
+    input.value = '';
+    pintarAluCorreos();
+});
+$('#alu-btn-guardar-config').addEventListener('click', async () => {
+    const msg = $('#alu-config-msg'); msg.textContent = '';
+    const correoAdmin = $('#alu-correo-admin').value.trim();
+    const municipios = $('#alu-municipios').value.split(',').map((m) => m.trim()).filter(Boolean);
+    const tiposPotencia = $('#alu-tipos-potencia').value.split(',').map((t) => t.trim()).filter(Boolean);
+    try {
+        await invocarAlumbrado('guardar_configuracion', { correosDestino: aluCorreosDestino, correoAdmin, municipios, tiposPotencia });
+        toast('Configuración guardada.');
+    } catch (e) { msg.textContent = 'No se pudo guardar: ' + e.message; }
+});
+
+// -------- proyectos sincronizados
+async function cargarAluProyectos() {
+    const tbody = $('#alu-tbody-proyectos');
+    tbody.innerHTML = '<tr><td colspan="4">Cargando…</td></tr>';
+    try {
+        const { proyectos } = await invocarAlumbrado('listar_proyectos');
+        $('#alu-proyectos-vacio').classList.toggle('oculto', (proyectos || []).length > 0);
+        tbody.innerHTML = (proyectos || []).map((p) => `
+            <tr>
+                <td>${escapeHtml(p.id)}</td>
+                <td>${escapeHtml(p.nombreFuncionario || '')} (${escapeHtml(p.codigoFuncionario || '')})</td>
+                <td class="col-fecha">${escapeHtml(p.fechaCreacion || '—')}</td>
+                <td class="col-borrar"><button class="btn-icono" data-borrar-proyecto="${escapeHtml(p.id)}" title="Borrar">🗑</button></td>
+            </tr>`).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+$('#alu-tbody-proyectos').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-borrar-proyecto]');
+    if (!btn) return;
+    const nombreProyecto = btn.dataset.borrarProyecto;
+    if (!confirm(`¿Borrar el proyecto "${nombreProyecto}" y sus fotos? Esto no se puede deshacer.`)) return;
+    try {
+        await invocarAlumbrado('borrar_proyecto', { nombreProyecto });
+        toast('Proyecto borrado.');
+        await cargarAluProyectos();
+    } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+});
+
+// -------- actividad
+async function cargarAluActividad() {
+    const tbody = $('#alu-tbody-actividad');
+    tbody.innerHTML = '<tr><td colspan="4">Cargando…</td></tr>';
+    try {
+        const { logs } = await invocarAlumbrado('listar_logs');
+        $('#alu-actividad-vacio').classList.toggle('oculto', (logs || []).length > 0);
+        tbody.innerHTML = (logs || []).map((l) => `
+            <tr>
+                <td>${escapeHtml(l.accion || '')}</td>
+                <td>${escapeHtml(l.detalle || '—')}</td>
+                <td class="col-fecha">${l.fecha ? new Date(l.fecha).toLocaleString('es-CO') : '—'}</td>
+                <td class="col-borrar"><button class="btn-icono" data-borrar-log="${escapeHtml(l.id)}" title="Borrar">🗑</button></td>
+            </tr>`).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+$('#alu-tbody-actividad').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-borrar-log]');
+    if (!btn) return;
+    try {
+        await invocarAlumbrado('borrar_log', { id: btn.dataset.borrarLog });
+        await cargarAluActividad();
+    } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
+});
+$('#alu-btn-borrar-actividad').addEventListener('click', async () => {
+    if (!confirm('¿Borrar TODA la actividad registrada? Esto no se puede deshacer.')) return;
+    try {
+        await invocarAlumbrado('borrar_toda_actividad');
+        toast('Actividad borrada.');
+        await cargarAluActividad();
+    } catch (err) { toast('No se pudo borrar: ' + err.message, 'error'); }
 });
 
 intentarSesion();

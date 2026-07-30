@@ -2,32 +2,35 @@
 // =============================================================================
 // Edge Function 'enviar-correo-soporte' de Supabase (Deno). Se dispara cuando
 // el admin aprieta "Enviar correo" en un ticket de soporte: le avisa por
-// correo (Resend) al usuario que su solicitud se resolvió, deja una
+// correo (Gmail SMTP) al usuario que su solicitud se resolvió, deja una
 // notificación in-app para que la app correspondiente se la muestre, y cierra
 // el ticket.
 //
 // Flujo:
 //   1. Verifica que quien llama esté logueado Y sea administrador.
 //   2. Busca el mensaje de soporte.
-//   3. Arma y manda el correo con Resend (incluye la respuesta guardada, si la hay).
+//   3. Arma y manda el correo por Gmail SMTP (incluye la respuesta guardada, si la hay).
 //   4. Con la service role key: guarda la notificación in-app, cierra el
 //      ticket y registra el evento en logs_seguridad. Esto se hace pase lo
-//      que pase con el correo -- si Resend falla, igual queda la notificación
-//      in-app y el ticket cerrado.
+//      que pase con el correo -- si el envío falla, igual queda la
+//      notificación in-app y el ticket cerrado.
 //
 // CÓMO PUBLICARLA: igual que 'crear-usuario' -- Dashboard -> Edge Functions ->
-// Create a new function -> "enviar-correo-soporte" -> pegar y Deploy. Usa el
-// mismo secret RESEND_API_KEY ya configurado para 'crear-usuario'.
+// Create a new function -> "enviar-correo-soporte" -> pegar y Deploy. Usa los
+// mismos secrets GMAIL_USER / GMAIL_APP_PASSWORD ya configurados para
+// 'crear-usuario' (ver cabecera de ese archivo para cómo generarlos).
 //
 // Requiere haber corrido supabase_centro_mando_v2.sql en el proyecto.
 // =============================================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
+const GMAIL_USER = Deno.env.get("GMAIL_USER")!;
+const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 
 const CABECERAS_CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -37,15 +40,25 @@ const jsonRespuesta = (obj: unknown, status = 200) =>
     new Response(JSON.stringify(obj), { status, headers: { ...CABECERAS_CORS, "Content-Type": "application/json" } });
 
 async function enviarCorreo(destinatario: string, asunto: string, html: string) {
-    const resp = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-        // TODO: cambiar el remitente a un dominio propio verificado en Resend
-        // en cuanto lo tengan -- en modo sandbox (onboarding@resend.dev) solo
-        // le llega a la cuenta de Resend registrada, no a usuarios reales.
-        body: JSON.stringify({ from: "Centro de Mando JC <onboarding@resend.dev>", to: [destinatario], subject: asunto, html }),
+    const client = new SMTPClient({
+        connection: {
+            hostname: "smtp.gmail.com",
+            port: 465,
+            tls: true,
+            auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
+        },
     });
-    if (!resp.ok) throw new Error(`Resend respondió ${resp.status}: ${await resp.text()}`);
+    try {
+        await client.send({
+            from: `Centro de Mando JC <${GMAIL_USER}>`,
+            to: destinatario,
+            subject: asunto,
+            content: "Tu cliente de correo no muestra HTML -- pedile a tu administrador los datos por otro medio.",
+            html,
+        });
+    } finally {
+        await client.close();
+    }
 }
 
 function armarCorreoResuelto(respuesta: string | null): string {

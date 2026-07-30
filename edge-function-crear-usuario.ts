@@ -4,7 +4,8 @@
 // la tabla 'usuarios' (el esquema custom de login que usan las apps de la
 // suite, NO Supabase Auth), le otorga acceso opcional a una o más apps, y le
 // manda un correo de bienvenida con una contraseña temporal + los links de
-// descarga correspondientes, vía Resend.
+// descarga correspondientes, por SMTP de Gmail (mismo mecanismo que ya usa
+// Electrohuila.py para mandar códigos, solo que acá corre server-side).
 //
 // Flujo:
 //   1. Verifica que quien llama esté logueado Y sea administrador (igual que
@@ -15,17 +16,22 @@
 //      usando la SERVICE ROLE KEY (no el JWT del admin) -- así las columnas
 //      salt/hash nunca quedan expuestas a un grant directo del cliente.
 //   5. Junta los enlaces de descarga de las apps otorgadas.
-//   6. Manda el correo de bienvenida con Resend. Si falla, el usuario queda
-//      creado igual -- se devuelve la contraseña en la respuesta para que el
-//      admin la copie a mano.
+//   6. Manda el correo de bienvenida por Gmail SMTP. Si falla, el usuario
+//      queda creado igual -- se devuelve la contraseña en la respuesta para
+//      que el admin la copie a mano.
 //   7. Registra el alta en logs_seguridad.
 //
 // CÓMO PUBLICARLA (sin instalar nada local, igual que 'cerebro'):
 //   1. Supabase Dashboard -> Edge Functions -> Create a new function -> "crear-usuario".
 //   2. Pegá todo este archivo y Deploy.
-//   3. Dashboard -> Edge Functions -> Secrets -> agregá RESEND_API_KEY (ver
-//      resend.com). SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY ya están
-//      disponibles automáticamente, no hace falta cargarlas a mano.
+//   3. Dashboard -> Edge Functions -> Secrets -> agregá GMAIL_USER (la
+//      dirección de Gmail que manda los correos) y GMAIL_APP_PASSWORD (una
+//      "contraseña de aplicación" de 16 caracteres -- Cuenta de Google ->
+//      Seguridad -> Verificación en dos pasos [hay que activarla primero] ->
+//      Contraseñas de aplicaciones -> generar una nueva). NO uses la
+//      contraseña normal de la cuenta, Gmail la rechaza para SMTP.
+//      SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY ya están disponibles
+//      automáticamente, no hace falta cargarlas a mano.
 //
 // Requiere haber corrido supabase_centro_mando_v2.sql en el proyecto.
 //
@@ -37,11 +43,13 @@
 // =============================================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
+const GMAIL_USER = Deno.env.get("GMAIL_USER")!;
+const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 
 const CABECERAS_CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -76,15 +84,25 @@ async function calcularHash(salt: string, password: string): Promise<string> {
 }
 
 async function enviarCorreo(destinatario: string, asunto: string, html: string) {
-    const resp = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-        // TODO: cambiar el remitente a un dominio propio verificado en Resend
-        // en cuanto lo tengan -- en modo sandbox (onboarding@resend.dev) solo
-        // le llega a la cuenta de Resend registrada, no a usuarios reales.
-        body: JSON.stringify({ from: "Centro de Mando JC <onboarding@resend.dev>", to: [destinatario], subject: asunto, html }),
+    const client = new SMTPClient({
+        connection: {
+            hostname: "smtp.gmail.com",
+            port: 465,
+            tls: true,
+            auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
+        },
     });
-    if (!resp.ok) throw new Error(`Resend respondió ${resp.status}: ${await resp.text()}`);
+    try {
+        await client.send({
+            from: `Centro de Mando JC <${GMAIL_USER}>`,
+            to: destinatario,
+            subject: asunto,
+            content: "Tu cliente de correo no muestra HTML -- pedile a tu administrador los datos por otro medio.",
+            html,
+        });
+    } finally {
+        await client.close();
+    }
 }
 
 function armarCorreoBienvenida(correo: string, password: string, enlacesPorApp: Map<string, { nombre: string; url: string }[]>): string {

@@ -414,6 +414,16 @@ tbody tr:last-child td { border-bottom: none; }
 .campo-check input { width: 16px; height: 16px; }
 .col-url { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------------------------------------------------------- ALUMBRADO PÚBLICO */
+.subtabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.subtab-item {
+    background: var(--bg-card-2); border: 1px solid var(--border); color: var(--text2);
+    padding: 8px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+}
+.subtab-item:hover { border-color: var(--accent); }
+.subtab-item.activo { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.alu-tab .panel-card { margin-bottom: 0; }
+
 /* ==================================================================== MODAL */
 .modal {
     position: fixed; inset: 0; z-index: 20;
