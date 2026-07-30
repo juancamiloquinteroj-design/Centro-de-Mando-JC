@@ -99,7 +99,8 @@ Deno.serve(async (req) => {
         let emailEnviado = true;
         try {
             await enviarCorreo(s.correo, "Tu solicitud de soporte fue resuelta", armarCorreoResuelto(s.respuesta ?? null));
-        } catch {
+        } catch (e) {
+            console.error("Fallo el envío del correo de soporte resuelto:", e);
             emailEnviado = false;
         }
 

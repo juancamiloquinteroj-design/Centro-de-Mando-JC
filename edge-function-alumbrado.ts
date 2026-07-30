@@ -221,6 +221,27 @@ async function listarArchivosStorage(prefix: string): Promise<string[]> {
     // deno-lint-ignore no-explicit-any
     return (data.items || []).map((i: any) => i.name as string);
 }
+// Firebase Storage guarda un "download token" en los metadatos de cada
+// archivo subido con su SDK (que es como la app móvil sube las fotos) -- con
+// ese token se arma la misma URL pública que usaría getDownloadURL() en el
+// cliente, fetcheable directo desde el navegador sin pasar por acá (así el
+// ZIP se arma en el navegador, sin límites de tamaño/tiempo de esta función).
+async function listarFotosConUrl(prefix: string): Promise<{ nombre: string; url: string }[]> {
+    const token = await obtenerTokenAcceso();
+    const resp = await fetch(`https://storage.googleapis.com/storage/v1/b/${STORAGE_BUCKET}/o?prefix=${encodeURIComponent(prefix)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    // deno-lint-ignore no-explicit-any
+    return (data.items || []).map((item: any) => {
+        const tokenDescarga = item.metadata?.firebaseStorageDownloadTokens?.split(",")[0];
+        const url = tokenDescarga
+            ? `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(item.name)}?alt=media&token=${tokenDescarga}`
+            : `https://storage.googleapis.com/storage/v1/b/${STORAGE_BUCKET}/o/${encodeURIComponent(item.name)}?alt=media`;
+        return { nombre: item.name.split("/").pop(), url };
+    });
+}
 async function borrarArchivoStorage(nombre: string) {
     const token = await obtenerTokenAcceso();
     await fetch(`https://storage.googleapis.com/storage/v1/b/${STORAGE_BUCKET}/o/${encodeURIComponent(nombre)}`, {
@@ -292,6 +313,11 @@ Deno.serve(async (req) => {
             case "listar_proyectos": {
                 const proyectos = await listarColeccion("proyectos");
                 return jsonRespuesta({ ok: true, proyectos });
+            }
+            case "obtener_fotos_proyecto": {
+                const { nombreProyecto } = datos;
+                const fotos = await listarFotosConUrl(`proyectos/${nombreProyecto}/fotos/`);
+                return jsonRespuesta({ ok: true, fotos });
             }
             case "borrar_proyecto": {
                 const { nombreProyecto } = datos;

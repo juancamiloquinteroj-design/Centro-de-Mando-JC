@@ -105,23 +105,51 @@ async function enviarCorreo(destinatario: string, asunto: string, html: string) 
     }
 }
 
+function escapeHtml(s: string): string {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
 function armarCorreoBienvenida(correo: string, password: string, enlacesPorApp: Map<string, { nombre: string; url: string }[]>): string {
     const bloquesApps = Array.from(enlacesPorApp.entries()).map(([nombreApp, links]) => {
         const items = links.length
-            ? links.map((l) => `<li><a href="${l.url}">${l.nombre}</a></li>`).join("")
-            : `<li>El instalador te lo comparte tu administrador.</li>`;
-        return `<p style="margin:16px 0 4px"><b>${nombreApp}</b></p><ul style="margin:4px 0">${items}</ul>`;
+            ? links.map((l) =>
+                `<a href="${escapeHtml(l.url)}" style="display:inline-block;margin:4px 6px 4px 0;padding:9px 16px;background:#C9A227;color:#ffffff;text-decoration:none;border-radius:8px;font-size:12.5px;font-weight:bold;">⬇ ${escapeHtml(l.nombre)}</a>`)
+                .join("")
+            : `<p style="margin:2px 0 0;font-size:12.5px;color:#8a8a8a;">El instalador te lo comparte tu administrador.</p>`;
+        return `<div style="margin:0 0 18px;"><p style="margin:0 0 8px;font-size:13px;font-weight:bold;color:#333333;">📦 ${escapeHtml(nombreApp)}</p>${items}</div>`;
     }).join("");
 
     return `
-        <div style="font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">
-            <h2>Bienvenido al Centro de Mando JC</h2>
-            <p>Se creó tu cuenta para acceder a la suite de aplicaciones de CINCO S.A.S.</p>
-            <p><b>Correo:</b> ${correo}<br><b>Contraseña temporal:</b> <code style="font-size:15px">${password}</code></p>
-            <p>Por seguridad, al ingresar por primera vez el sistema te va a pedir que la cambies.</p>
-            ${bloquesApps || "<p>Todavía no tenés acceso a ninguna app -- pedile a tu administrador que te lo otorgue.</p>"}
-            <p style="margin-top:24px;color:#666;font-size:12px">Si no esperabas este correo, avisale a tu administrador.</p>
-        </div>`;
+    <div style="background:#f4f1ea;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#8B6B14;background-image:linear-gradient(135deg,#C9A227,#8B6B14);padding:30px 32px;text-align:center;">
+            <div style="font-size:30px;line-height:1;">⚙</div>
+            <h1 style="margin:10px 0 0;color:#ffffff;font-size:20px;">Centro de Mando</h1>
+            <p style="margin:2px 0 0;color:rgba(255,255,255,0.85);font-size:11.5px;letter-spacing:1px;text-transform:uppercase;">CINCO S.A.S.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;color:#2b2b2b;font-size:14px;line-height:1.6;">
+            <h2 style="margin:0 0 12px;font-size:18px;color:#1a1a1a;">¡Bienvenido!</h2>
+            <p style="margin:0 0 20px;">Se creó tu cuenta para acceder a la suite de aplicaciones. Estos son tus datos de ingreso:</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f4ec;border-radius:12px;margin:0 0 20px;">
+              <tr><td style="padding:18px 20px;">
+                <p style="margin:0 0 3px;font-size:11px;color:#8a7a4a;text-transform:uppercase;letter-spacing:.5px;">Correo</p>
+                <p style="margin:0 0 14px;font-size:14px;font-weight:bold;color:#1a1a1a;">${escapeHtml(correo)}</p>
+                <p style="margin:0 0 3px;font-size:11px;color:#8a7a4a;text-transform:uppercase;letter-spacing:.5px;">Contraseña temporal</p>
+                <p style="margin:0;font-size:19px;font-weight:bold;letter-spacing:1px;font-family:'Courier New',monospace;color:#8B6B14;">${escapeHtml(password)}</p>
+              </td></tr>
+            </table>
+            <p style="margin:0 0 24px;padding:12px 16px;background:#fff6e5;border-left:3px solid #C9A227;font-size:13px;color:#6b5a1e;border-radius:0 6px 6px 0;">
+              🔒 Por seguridad, al ingresar por primera vez el sistema te va a pedir que la cambies.
+            </p>
+            ${bloquesApps || `<p style="margin:0 0 20px;font-size:13px;color:#8a8a8a;">Todavía no tenés acceso a ninguna app -- pedile a tu administrador que te lo otorgue.</p>`}
+            <p style="margin:28px 0 0;font-size:11.5px;color:#999999;border-top:1px solid #eeeeee;padding-top:16px;">Si no esperabas este correo, avisale a tu administrador.</p>
+          </td>
+        </tr>
+      </table>
+    </div>`;
 }
 
 Deno.serve(async (req) => {
@@ -188,7 +216,11 @@ Deno.serve(async (req) => {
         let emailEnviado = true;
         try {
             await enviarCorreo(correo, "Bienvenido al Centro de Mando JC", armarCorreoBienvenida(correo, password, enlacesPorApp));
-        } catch {
+        } catch (e) {
+            // Antes esto se descartaba en silencio -- por eso no aparecía nada
+            // en los Logs del Dashboard aunque el envío fallara. Ahora queda
+            // registrado ahí para poder ver la causa real (SMTP, credenciales, etc).
+            console.error("Fallo el envío del correo de bienvenida:", e);
             emailEnviado = false;
         }
 

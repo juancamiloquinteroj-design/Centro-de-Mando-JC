@@ -182,7 +182,7 @@ function renderAplicaciones() {
         return `
         <div class="app-card app-card-expandida" style="animation-delay:${i * 60}ms">
             <div class="app-card-cabecera">
-                <div class="app-card-icono app-card-icono-editable" data-cambiar-icono="${a.slug}" title="Cambiar ícono (PNG)">
+                <div class="app-card-icono app-card-icono-editable" data-cambiar-icono="${a.slug}" tabindex="0" title="Clic para elegir un archivo, o hacé foco acá y pegá una imagen con Ctrl+V">
                     ${iconoAppHtml(a)}
                     <span class="app-card-icono-lapiz">✎</span>
                 </div>
@@ -199,31 +199,52 @@ function renderAplicaciones() {
     $$('#apps-grid .app-card:not(.app-card-expandida)').forEach((el) => aplicarTilt(el, 3));
 }
 
+// Sirve tanto para el selector de archivo como para pegar (Ctrl+V) una imagen
+// copiada -- en los dos casos termina acá con un File/Blob real en la mano.
+async function subirArchivoIcono(slug, archivo) {
+    const extension = (archivo.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const ruta = `${slug}.${extension}`;
+    const { error: errSubida } = await supabase.storage.from('app-iconos').upload(ruta, archivo, {
+        contentType: archivo.type || 'image/png', upsert: true,
+    });
+    if (errSubida) { toast('No se pudo subir el ícono: ' + errSubida.message, 'error'); return; }
+
+    const { data: pub } = supabase.storage.from('app-iconos').getPublicUrl(ruta);
+    // ?v= al final para que el navegador no muestre la imagen vieja en caché
+    // cuando se reemplaza el ícono de la misma app.
+    const iconoUrl = `${pub.publicUrl}?v=${Date.now()}`;
+    const { error: errUpdate } = await supabase.from('apps').update({ icono_url: iconoUrl }).eq('slug', slug);
+    if (errUpdate) { toast('No se pudo guardar el ícono: ' + errUpdate.message, 'error'); return; }
+
+    toast('Ícono actualizado.');
+    await cargarTodo();
+}
+
 async function subirIconoApp(slug) {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/png';
-    input.addEventListener('change', async () => {
+    input.accept = 'image/*';
+    input.addEventListener('change', () => {
         const archivo = input.files[0];
-        if (!archivo) return;
-        const ruta = `${slug}.png`;
-        const { error: errSubida } = await supabase.storage.from('app-iconos').upload(ruta, archivo, {
-            contentType: 'image/png', upsert: true,
-        });
-        if (errSubida) { toast('No se pudo subir el ícono: ' + errSubida.message, 'error'); return; }
-
-        const { data: pub } = supabase.storage.from('app-iconos').getPublicUrl(ruta);
-        // ?v= al final para que el navegador no muestre la imagen vieja en caché
-        // cuando se reemplaza el ícono de la misma app.
-        const iconoUrl = `${pub.publicUrl}?v=${Date.now()}`;
-        const { error: errUpdate } = await supabase.from('apps').update({ icono_url: iconoUrl }).eq('slug', slug);
-        if (errUpdate) { toast('No se pudo guardar el ícono: ' + errUpdate.message, 'error'); return; }
-
-        toast('Ícono actualizado.');
-        await cargarTodo();
+        if (archivo) subirArchivoIcono(slug, archivo);
     });
     input.click();
 }
+
+// Pegar una imagen (Ctrl+V) mientras el cuadrito del ícono tiene el foco --
+// hace falta clickearlo primero (o tabular hasta él) para "apuntar" a qué app
+// se le va a cambiar el ícono, ya que el evento 'paste' no sabe por sí solo
+// sobre qué elemento se pegó.
+document.addEventListener('paste', (e) => {
+    const foco = document.activeElement;
+    const slug = foco?.dataset?.cambiarIcono;
+    if (!slug) return;
+    const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    const archivo = item.getAsFile();
+    if (archivo) subirArchivoIcono(slug, archivo);
+});
 
 function panelUsuariosApp(slug, misAccesos) {
     const ahora = Date.now();
@@ -1108,10 +1129,43 @@ async function cargarAluProyectos() {
                 <td>${escapeHtml(p.id)}</td>
                 <td>${escapeHtml(p.nombreFuncionario || '')} (${escapeHtml(p.codigoFuncionario || '')})</td>
                 <td class="col-fecha">${escapeHtml(p.fechaCreacion || '—')}</td>
-                <td class="col-borrar"><button class="btn-icono btn-icono-peligro" data-borrar-proyecto="${escapeHtml(p.id)}" title="Borrar">🗑</button></td>
+                <td class="col-borrar">
+                    <button class="btn-icono" data-descargar-proyecto="${escapeHtml(p.id)}" title="Descargar fotos (ZIP)">⬇</button>
+                    <button class="btn-icono btn-icono-peligro" data-borrar-proyecto="${escapeHtml(p.id)}" title="Borrar">🗑</button>
+                </td>
             </tr>`).join('');
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="4">Error: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+
+// Arma el ZIP en el navegador (JSZip, cargado en index.html como
+// vendor-jszip.js): trae la lista de fotos con sus URLs de descarga (la
+// Edge Function las arma con el token de Firebase Storage), las descarga acá
+// mismo con fetch() y las empaqueta -- así no hay límite de tamaño/tiempo de
+// la Edge Function, es directo navegador -> Firebase Storage.
+async function descargarZipProyecto(nombreProyecto) {
+    toast('Preparando descarga…');
+    try {
+        const { fotos } = await invocarAlumbrado('obtener_fotos_proyecto', { nombreProyecto });
+        if (!fotos || !fotos.length) { toast('Ese proyecto no tiene fotos.', 'error'); return; }
+
+        const zip = new window.JSZip();
+        await Promise.all(fotos.map(async (f) => {
+            const resp = await fetch(f.url);
+            if (!resp.ok) return;
+            zip.file(f.nombre, await resp.arrayBuffer());
+        }));
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${nombreProyecto}.zip`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        toast('Descarga lista.');
+    } catch (err) {
+        toast('No se pudo descargar: ' + err.message, 'error');
     }
 }
 
@@ -1188,6 +1242,9 @@ $('#apps-grid').addEventListener('click', async (e) => {
     }
 
     if (e.target.closest('#alu-btn-guardar-config')) { await guardarAluConfiguracion(); return; }
+
+    const descargarProyecto = e.target.closest('[data-descargar-proyecto]');
+    if (descargarProyecto) { await descargarZipProyecto(descargarProyecto.dataset.descargarProyecto); return; }
 
     const borrarProyecto = e.target.closest('[data-borrar-proyecto]');
     if (borrarProyecto) {
