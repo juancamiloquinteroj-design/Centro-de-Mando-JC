@@ -299,6 +299,11 @@ function filaUsuarioApp(u, a, slug) {
                         <option value="meses">Meses</option>
                     </select>
                     <button class="btn-icono vig-inline-ok" data-vig-app="${u.correo}|${slug}" title="Aplicar">✔</button>
+                    <select class="vig-inline-unidad" data-tipo-app="${u.correo}|${slug}"
+                            title="Tipo de licencia: la app lo muestra en su barra de estado (Versión de prueba / Versión definitiva). Se guarda al cambiarlo.">
+                        <option value="prueba" ${a.tipo_licencia === 'definitiva' ? '' : 'selected'}>Prueba</option>
+                        <option value="definitiva" ${a.tipo_licencia === 'definitiva' ? 'selected' : ''}>Definitiva</option>
+                    </select>
                 </div>
             </td>
             <td class="col-estado">
@@ -370,6 +375,17 @@ $('#apps-grid').addEventListener('click', async (e) => {
 });
 
 $('#apps-grid').addEventListener('change', async (e) => {
+    // Tipo de licencia (Prueba / Definitiva): se guarda apenas se cambia.
+    const tipoSel = e.target.closest('[data-tipo-app]');
+    if (tipoSel) {
+        const [correo, app] = tipoSel.dataset.tipoApp.split('|');
+        const { error } = await supabase.from('accesos')
+            .update({ tipo_licencia: tipoSel.value }).eq('correo', correo).eq('app', app);
+        if (error) { toast('No se pudo guardar: ' + error.message, 'error'); return; }
+        toast(`Licencia de "${correo}" marcada como ${tipoSel.value}.`);
+        await cargarTodo();
+        return;
+    }
     const toggle = e.target.closest('[data-toggle]');
     if (!toggle) return;
     const correo = toggle.dataset.toggle;
@@ -422,7 +438,7 @@ async function cargarTodo() {
     const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: sop }, { data: en }] = await Promise.all([
         supabase.from('apps').select('slug,nombre,icono_url').order('nombre'),
         supabase.from('usuarios').select('correo,bloqueado,creado,requiere_cambio_clave').order('creado', { ascending: false }),
-        supabase.from('accesos').select('correo,app,creado,expira'),
+        supabase.from('accesos').select('correo,app,creado,expira,tipo_licencia'),
         supabase.from('logs_seguridad').select('*').order('creado', { ascending: false }).limit(200),
         supabase.from('mensajes_soporte').select('*').order('creado', { ascending: false }),
         supabase.from('enlaces_apps').select('id,app,nombre,url,orden').order('app').order('orden'),
