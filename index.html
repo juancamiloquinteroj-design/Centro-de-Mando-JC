@@ -128,7 +128,7 @@
                     con esa clave y el link de descarga de las apps a las que le des acceso.</p>
                 <div class="tabla-wrap">
                     <table id="tabla-usuarios">
-                        <thead><tr><th>Correo</th><th>Estado</th><th>Clave</th><th>Creado</th><th></th></tr></thead>
+                        <thead><tr><th>Correo</th><th>Nombre / Empresa</th><th>Estado</th><th>Clave</th><th>Creado</th><th></th></tr></thead>
                         <tbody id="tbody-usuarios"></tbody>
                     </table>
                     <p class="tabla-vacia oculto" id="usuarios-vacio">Todavía no hay usuarios registrados.</p>
@@ -272,6 +272,22 @@
 <div id="modal-usuario" class="modal oculto">
     <div class="modal-card">
         <h3>Crear usuario</h3>
+        <label class="campo">
+            <span>Nombre completo</span>
+            <input type="text" id="us-nombre" placeholder="Nombre y apellidos">
+        </label>
+        <label class="campo">
+            <span>Cédula</span>
+            <input type="text" id="us-cedula" placeholder="Número de cédula">
+        </label>
+        <label class="campo">
+            <span>Empresa</span>
+            <input type="text" id="us-empresa" placeholder="Empresa a la que pertenece">
+        </label>
+        <label class="campo">
+            <span>Celular</span>
+            <input type="tel" id="us-celular" placeholder="300 000 0000">
+        </label>
         <label class="campo">
             <span>Correo del usuario</span>
             <input type="email" id="us-correo" placeholder="nombre@empresa.com">

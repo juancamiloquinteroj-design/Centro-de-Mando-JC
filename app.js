@@ -437,7 +437,7 @@ async function cargarAluTecnicosCount() {
 async function cargarTodo() {
     const [{ data: a }, { data: u }, { data: ac }, { data: lg }, { data: sop }, { data: en }] = await Promise.all([
         supabase.from('apps').select('slug,nombre,icono_url').order('nombre'),
-        supabase.from('usuarios').select('correo,bloqueado,creado,requiere_cambio_clave').order('creado', { ascending: false }),
+        supabase.from('usuarios').select('correo,nombre_completo,cedula,empresa,celular,bloqueado,creado,requiere_cambio_clave').order('creado', { ascending: false }),
         supabase.from('accesos').select('correo,app,creado,expira,tipo_licencia'),
         supabase.from('logs_seguridad').select('*').order('creado', { ascending: false }).limit(200),
         supabase.from('mensajes_soporte').select('*').order('creado', { ascending: false }),
@@ -667,6 +667,10 @@ function renderTablaUsuarios() {
     $('#tbody-usuarios').innerHTML = usuarios.map((u) => `
         <tr>
             <td class="col-correo">${escapeHtml(u.correo)}</td>
+            <td title="Cédula: ${escapeHtml(u.cedula || '—')}  ·  Celular: ${escapeHtml(u.celular || '—')}">
+                ${u.nombre_completo ? escapeHtml(u.nombre_completo) : '—'}
+                ${u.empresa ? `<br><small style="color:#8a8a8a;">${escapeHtml(u.empresa)}</small>` : ''}
+            </td>
             <td class="col-estado">
                 <label class="switch" title="${u.bloqueado ? 'Desbloquear' : 'Bloquear'}">
                     <input type="checkbox" data-toggle-usuario="${u.correo}" ${u.bloqueado ? '' : 'checked'}>
@@ -733,7 +737,10 @@ $('#us-apps-lista').addEventListener('change', (e) => {
 });
 
 $('#btn-crear-usuario').addEventListener('click', () => {
-    $('#us-correo').value = ''; $('#us-msg').textContent = '';
+    $('#us-correo').value = '';
+    $('#us-nombre').value = ''; $('#us-cedula').value = '';
+    $('#us-empresa').value = ''; $('#us-celular').value = '';
+    $('#us-msg').textContent = '';
     renderChecklistAppsUsuario();
     $('#modal-usuario').classList.remove('oculto');
 });
@@ -742,9 +749,17 @@ $('#modal-usuario').addEventListener('click', (e) => { if (e.target.id === 'moda
 
 $('#us-confirmar').addEventListener('click', async () => {
     const correo = $('#us-correo').value.trim().toLowerCase();
+    const nombre = $('#us-nombre').value.trim();
+    const cedula = $('#us-cedula').value.trim();
+    const empresa = $('#us-empresa').value.trim();
+    const celular = $('#us-celular').value.trim();
     const msg = $('#us-msg');
     const btn = $('#us-confirmar');
     msg.textContent = '';
+    if (!nombre) { msg.textContent = 'Falta el nombre completo.'; return; }
+    if (!cedula) { msg.textContent = 'Falta la cédula.'; return; }
+    if (!empresa) { msg.textContent = 'Falta la empresa.'; return; }
+    if (!celular) { msg.textContent = 'Falta el celular.'; return; }
     if (!correo || !correo.includes('@')) { msg.textContent = 'Correo inválido.'; return; }
     if (usuarios.some((u) => u.correo === correo)) { msg.textContent = 'Ya existe una cuenta con ese correo.'; return; }
 
@@ -756,7 +771,9 @@ $('#us-confirmar').addEventListener('click', async () => {
     });
 
     btn.disabled = true; btn.classList.add('cargando');
-    const { data, error } = await supabase.functions.invoke('crear-usuario', { body: { correo, accesos: accesosElegidos } });
+    const { data, error } = await supabase.functions.invoke('crear-usuario', {
+        body: { correo, nombre, cedula, empresa, celular, accesos: accesosElegidos },
+    });
     btn.disabled = false; btn.classList.remove('cargando');
 
     if (error || data?.error) { msg.textContent = 'No se pudo crear: ' + (data?.error || error.message); return; }
