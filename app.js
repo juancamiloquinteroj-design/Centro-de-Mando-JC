@@ -662,21 +662,19 @@ $('#ot-confirmar').addEventListener('click', async () => {
     await cargarTodo();
 });
 
-// Desplegable del campo "Empresa" (crear/editar usuario): las empresas que ya
-// tienen al menos un usuario, MÁS los operadores que el Visualizador de Datos
-// ya registró como "con datos cargados" (tabla 'operadores_externos', la
-// llena el propio backend de esa app -- ver rpc_registrar_operador). Así el
-// admin elige de una lista el operador EXACTO que ya tiene datos, en vez de
-// tipearlo de memoria -- evita vincular a alguien a un operador equivocado
-// por un typo. "+ Nueva empresa..." destapa un campo de texto para las que
-// todavía no existen en ningún lado.
+// Desplegable del campo "Empresa" (crear/editar usuario): SOLO los operadores
+// que el Visualizador de Datos registró como "con datos cargados" (tabla
+// 'operadores_externos', sincronizada por su backend contra las carpetas
+// reales -- ver rpc_sincronizar_operadores). A propósito NO se mezcla con
+// 'usuarios.empresa' (lo que haya tipeado un admin en cuentas viejas): eso
+// puede tener variantes de mayúsculas/typos que ya no coinciden con ninguna
+// carpeta real y confunden la lista. "+ Nueva empresa..." sigue disponible
+// para operadores que todavía no tienen datos cargados.
 let EMPRESAS_CONOCIDAS = [];
 
 async function renderListaEmpresas() {
-    const deUsuarios = usuarios.map((u) => u.empresa).filter(Boolean);
     const { data: externos } = await supabase.from('operadores_externos').select('nombre');
-    const deExternos = (externos || []).map((o) => o.nombre);
-    EMPRESAS_CONOCIDAS = [...new Set([...deUsuarios, ...deExternos])].sort();
+    EMPRESAS_CONOCIDAS = [...new Set((externos || []).map((o) => o.nombre))].sort();
     poblarSelectEmpresa('us-empresa-select');
     poblarSelectEmpresa('eu-empresa-select');
 }
