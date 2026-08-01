@@ -773,6 +773,11 @@ $('#eu-confirmar').addEventListener('click', async () => {
     if (error) { msg.textContent = 'No se pudo guardar: ' + error.message; return; }
     toast(`Datos de "${correo}" actualizados.`);
     $('#modal-editar-usuario').classList.add('oculto');
+
+    if ($('#eu-empresa-select').value === '__nueva__') {
+        await crearCarpetaOperador(empresa);
+    }
+
     await cargarTodo();
 });
 $('#tbody-usuarios').addEventListener('change', async (e) => {
@@ -899,8 +904,34 @@ $('#us-confirmar').addEventListener('click', async () => {
         toast(`"${correo}" creado. Le llegó el correo de bienvenida.`);
         $('#modal-usuario').classList.add('oculto');
     }
+
+    // Si la empresa es nueva (no existía como operador con datos), le
+    // avisamos al backend del Visualizador de Datos que le cree la carpeta
+    // vacía en backend/data/ -- así solo falta que alguien copie el CSV ahí.
+    if ($('#us-empresa-select').value === '__nueva__' && $$('#us-apps-lista [data-us-app]:checked')
+        .some((chk) => chk.dataset.usApp === 'visualizador_datos')) {
+        await crearCarpetaOperador(empresa);
+    }
+
     await cargarTodo();
 });
+
+async function crearCarpetaOperador(nombreEmpresa) {
+    const cfg = window.VISUALIZADOR_DATOS_CONFIG;
+    if (!cfg) return;
+    try {
+        const r = await fetch(`${cfg.apiBase}/api/admin/crear-operador`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': cfg.adminToken, 'ngrok-skip-browser-warning': 'true' },
+            body: JSON.stringify({ nombre: nombreEmpresa }),
+        });
+        const data = await r.json().catch(() => null);
+        if (!r.ok) { toast(`Usuario creado, pero no se pudo crear la carpeta de datos: ${data?.detail || r.status}`, 'error'); return; }
+        toast(`Carpeta creada en backend/data/${nombreEmpresa} -- ya se puede copiar el CSV ahí.`);
+    } catch (e) {
+        toast('Usuario creado, pero no se pudo contactar al backend para crear la carpeta (¿está prendido el PC / el túnel?).', 'error');
+    }
+}
 
 // ------------------------------------------------------------------ enlaces de descarga
 let enlaceEditando = null;
