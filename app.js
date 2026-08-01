@@ -662,11 +662,17 @@ $('#ot-confirmar').addEventListener('click', async () => {
     await cargarTodo();
 });
 
-// Sugerencias del campo "Empresa" (crear/editar usuario) -- las empresas que
-// ya tienen al menos un usuario, para no crear duplicados por typo
-// ("ElectroHuila" vs "Electrohuila"). Sigue permitiendo escribir una nueva.
-function renderListaEmpresas() {
-    const empresas = [...new Set(usuarios.map((u) => u.empresa).filter(Boolean))].sort();
+// Sugerencias del campo "Empresa" (crear/editar usuario): las empresas que ya
+// tienen al menos un usuario, MÁS los operadores que el Visualizador de Datos
+// ya registró como "con datos cargados" (tabla 'operadores_externos', la
+// llena el propio backend de esa app -- ver rpc_registrar_operador). Así el
+// admin ve el nombre EXACTO del operador que ya tiene datos, sin tener que
+// acordárselo de memoria -- evita vincular a alguien a un operador equivocado.
+async function renderListaEmpresas() {
+    const deUsuarios = usuarios.map((u) => u.empresa).filter(Boolean);
+    const { data: externos } = await supabase.from('operadores_externos').select('nombre');
+    const deExternos = (externos || []).map((o) => o.nombre);
+    const empresas = [...new Set([...deUsuarios, ...deExternos])].sort();
     $('#lista-empresas').innerHTML = empresas.map((e) => `<option value="${escapeHtml(e)}">`).join('');
 }
 
