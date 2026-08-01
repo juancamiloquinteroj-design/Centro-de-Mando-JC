@@ -662,18 +662,53 @@ $('#ot-confirmar').addEventListener('click', async () => {
     await cargarTodo();
 });
 
-// Sugerencias del campo "Empresa" (crear/editar usuario): las empresas que ya
+// Desplegable del campo "Empresa" (crear/editar usuario): las empresas que ya
 // tienen al menos un usuario, MÁS los operadores que el Visualizador de Datos
 // ya registró como "con datos cargados" (tabla 'operadores_externos', la
 // llena el propio backend de esa app -- ver rpc_registrar_operador). Así el
-// admin ve el nombre EXACTO del operador que ya tiene datos, sin tener que
-// acordárselo de memoria -- evita vincular a alguien a un operador equivocado.
+// admin elige de una lista el operador EXACTO que ya tiene datos, en vez de
+// tipearlo de memoria -- evita vincular a alguien a un operador equivocado
+// por un typo. "+ Nueva empresa..." destapa un campo de texto para las que
+// todavía no existen en ningún lado.
+let EMPRESAS_CONOCIDAS = [];
+
 async function renderListaEmpresas() {
     const deUsuarios = usuarios.map((u) => u.empresa).filter(Boolean);
     const { data: externos } = await supabase.from('operadores_externos').select('nombre');
     const deExternos = (externos || []).map((o) => o.nombre);
-    const empresas = [...new Set([...deUsuarios, ...deExternos])].sort();
-    $('#lista-empresas').innerHTML = empresas.map((e) => `<option value="${escapeHtml(e)}">`).join('');
+    EMPRESAS_CONOCIDAS = [...new Set([...deUsuarios, ...deExternos])].sort();
+    poblarSelectEmpresa('us-empresa-select');
+    poblarSelectEmpresa('eu-empresa-select');
+}
+
+function poblarSelectEmpresa(id, seleccionada) {
+    const opciones = EMPRESAS_CONOCIDAS.map((e) => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+    $(`#${id}`).innerHTML =
+        `<option value="">Seleccioná una empresa...</option>${opciones}<option value="__nueva__">+ Nueva empresa...</option>`;
+    if (seleccionada) $(`#${id}`).value = EMPRESAS_CONOCIDAS.includes(seleccionada) ? seleccionada : '__nueva__';
+}
+
+// Muestra/oculta el campo de texto "Nueva empresa" según lo que se elija en
+// el select. Un solo listener delegado sirve para los dos modales.
+document.addEventListener('change', (e) => {
+    if (e.target.id !== 'us-empresa-select' && e.target.id !== 'eu-empresa-select') return;
+    const prefijo = e.target.id.startsWith('us-') ? 'us' : 'eu';
+    const input = $(`#${prefijo}-empresa`);
+    if (e.target.value === '__nueva__') {
+        input.classList.remove('oculto');
+        input.value = '';
+        input.focus();
+    } else {
+        input.classList.add('oculto');
+        input.value = '';
+    }
+});
+
+// Empresa efectiva elegida en el modal 'us' (crear) o 'eu' (editar): el
+// select, salvo que esté en "+ Nueva empresa..." -- ahí vale lo tipeado.
+function empresaElegida(prefijo) {
+    const sel = $(`#${prefijo}-empresa-select`).value;
+    return sel === '__nueva__' ? $(`#${prefijo}-empresa`).value.trim() : sel;
 }
 
 // ------------------------------------------------------------------ usuarios
@@ -708,9 +743,11 @@ function abrirModalEditarUsuario(u) {
     $('#eu-correo').value = u.correo;
     $('#eu-nombre').value = u.nombre_completo || '';
     $('#eu-cedula').value = u.cedula || '';
-    $('#eu-empresa').value = u.empresa || '';
     $('#eu-celular').value = u.celular || '';
     $('#eu-msg').textContent = '';
+    poblarSelectEmpresa('eu-empresa-select', u.empresa || '');
+    $('#eu-empresa').classList.toggle('oculto', $('#eu-empresa-select').value !== '__nueva__');
+    $('#eu-empresa').value = $('#eu-empresa-select').value === '__nueva__' ? (u.empresa || '') : '';
     $('#modal-editar-usuario').classList.remove('oculto');
 }
 $('#eu-cancelar').addEventListener('click', () => $('#modal-editar-usuario').classList.add('oculto'));
@@ -720,7 +757,7 @@ $('#eu-confirmar').addEventListener('click', async () => {
     const correo = $('#eu-correo').value;
     const nombre_completo = $('#eu-nombre').value.trim();
     const cedula = $('#eu-cedula').value.trim();
-    const empresa = $('#eu-empresa').value.trim();
+    const empresa = empresaElegida('eu');
     const celular = $('#eu-celular').value.trim();
     const msg = $('#eu-msg');
     const btn = $('#eu-confirmar');
@@ -815,8 +852,11 @@ $('#us-apps-lista').addEventListener('change', (e) => {
 $('#btn-crear-usuario').addEventListener('click', () => {
     $('#us-correo').value = '';
     $('#us-nombre').value = ''; $('#us-cedula').value = '';
-    $('#us-empresa').value = ''; $('#us-celular').value = '';
+    $('#us-celular').value = '';
     $('#us-msg').textContent = '';
+    poblarSelectEmpresa('us-empresa-select');
+    $('#us-empresa').value = '';
+    $('#us-empresa').classList.add('oculto');
     renderChecklistAppsUsuario();
     $('#modal-usuario').classList.remove('oculto');
 });
@@ -827,7 +867,7 @@ $('#us-confirmar').addEventListener('click', async () => {
     const correo = $('#us-correo').value.trim().toLowerCase();
     const nombre = $('#us-nombre').value.trim();
     const cedula = $('#us-cedula').value.trim();
-    const empresa = $('#us-empresa').value.trim();
+    const empresa = empresaElegida('us');
     const celular = $('#us-celular').value.trim();
     const msg = $('#us-msg');
     const btn = $('#us-confirmar');

@@ -268,9 +268,6 @@
     </div>
 </div>
 
-<!-- Empresas ya existentes (sugerencias para el campo "Empresa" -- evita duplicados por typo) -->
-<datalist id="lista-empresas"></datalist>
-
 <!-- ==================== MODAL: crear usuario ==================== -->
 <div id="modal-usuario" class="modal oculto">
     <div class="modal-card">
@@ -285,7 +282,8 @@
         </label>
         <label class="campo">
             <span>Empresa</span>
-            <input type="text" id="us-empresa" placeholder="Empresa a la que pertenece" list="lista-empresas" autocomplete="off">
+            <select id="us-empresa-select"><option value="">Cargando empresas...</option></select>
+            <input type="text" id="us-empresa" placeholder="Nombre de la empresa nueva" class="oculto" style="margin-top:6px">
         </label>
         <label class="campo">
             <span>Celular</span>
@@ -330,7 +328,8 @@
         </label>
         <label class="campo">
             <span>Empresa</span>
-            <input type="text" id="eu-empresa" placeholder="Empresa a la que pertenece" list="lista-empresas" autocomplete="off">
+            <select id="eu-empresa-select"><option value="">Cargando empresas...</option></select>
+            <input type="text" id="eu-empresa" placeholder="Nombre de la empresa nueva" class="oculto" style="margin-top:6px">
         </label>
         <label class="campo">
             <span>Celular</span>
