@@ -447,6 +447,7 @@ async function cargarTodo() {
     soporte = sop || []; enlaces = en || [];
     await cargarAluTecnicosCount();
 
+    renderListaEmpresas();
     renderStats();
     renderGraficaCrecimiento();
     renderGraficaApps();
@@ -660,6 +661,14 @@ $('#ot-confirmar').addEventListener('click', async () => {
     $('#modal-otorgar').classList.add('oculto');
     await cargarTodo();
 });
+
+// Sugerencias del campo "Empresa" (crear/editar usuario) -- las empresas que
+// ya tienen al menos un usuario, para no crear duplicados por typo
+// ("ElectroHuila" vs "Electrohuila"). Sigue permitiendo escribir una nueva.
+function renderListaEmpresas() {
+    const empresas = [...new Set(usuarios.map((u) => u.empresa).filter(Boolean))].sort();
+    $('#lista-empresas').innerHTML = empresas.map((e) => `<option value="${escapeHtml(e)}">`).join('');
+}
 
 // ------------------------------------------------------------------ usuarios
 function renderTablaUsuarios() {
