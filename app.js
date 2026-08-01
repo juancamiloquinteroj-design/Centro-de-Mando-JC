@@ -681,9 +681,50 @@ function renderTablaUsuarios() {
                 ? '<span class="tipo-tag tipo-login_fallido">Debe cambiarla</span>'
                 : '<span class="tipo-tag tipo-login_ok">OK</span>'}</td>
             <td class="col-fecha">${fechaCorta(u.creado)}</td>
-            <td class="col-borrar"><button class="btn-icono btn-icono-peligro" data-borrar-usuario="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button></td>
+            <td class="col-borrar">
+                <button class="btn-icono" data-editar-usuario="${u.correo}" title="Editar datos (nombre, cédula, empresa, celular)">✎</button>
+                <button class="btn-icono" data-resetear-usuario="${u.correo}" title="Generar clave temporal nueva y mandarla por correo">🔑</button>
+                <button class="btn-icono btn-icono-peligro" data-borrar-usuario="${u.correo}" title="Borrar cuenta completa (todas las apps de la suite)">⛔</button>
+            </td>
         </tr>`).join('');
 }
+
+function abrirModalEditarUsuario(u) {
+    $('#eu-correo').value = u.correo;
+    $('#eu-nombre').value = u.nombre_completo || '';
+    $('#eu-cedula').value = u.cedula || '';
+    $('#eu-empresa').value = u.empresa || '';
+    $('#eu-celular').value = u.celular || '';
+    $('#eu-msg').textContent = '';
+    $('#modal-editar-usuario').classList.remove('oculto');
+}
+$('#eu-cancelar').addEventListener('click', () => $('#modal-editar-usuario').classList.add('oculto'));
+$('#modal-editar-usuario').addEventListener('click', (e) => { if (e.target.id === 'modal-editar-usuario') $('#modal-editar-usuario').classList.add('oculto'); });
+
+$('#eu-confirmar').addEventListener('click', async () => {
+    const correo = $('#eu-correo').value;
+    const nombre_completo = $('#eu-nombre').value.trim();
+    const cedula = $('#eu-cedula').value.trim();
+    const empresa = $('#eu-empresa').value.trim();
+    const celular = $('#eu-celular').value.trim();
+    const msg = $('#eu-msg');
+    const btn = $('#eu-confirmar');
+    msg.textContent = '';
+    if (!nombre_completo) { msg.textContent = 'Falta el nombre completo.'; return; }
+    if (!cedula) { msg.textContent = 'Falta la cédula.'; return; }
+    if (!empresa) { msg.textContent = 'Falta la empresa.'; return; }
+    if (!celular) { msg.textContent = 'Falta el celular.'; return; }
+
+    btn.disabled = true; btn.classList.add('cargando');
+    const { error } = await supabase.from('usuarios')
+        .update({ nombre_completo, cedula, empresa, celular }).eq('correo', correo);
+    btn.disabled = false; btn.classList.remove('cargando');
+
+    if (error) { msg.textContent = 'No se pudo guardar: ' + error.message; return; }
+    toast(`Datos de "${correo}" actualizados.`);
+    $('#modal-editar-usuario').classList.add('oculto');
+    await cargarTodo();
+});
 $('#tbody-usuarios').addEventListener('change', async (e) => {
     const toggle = e.target.closest('[data-toggle-usuario]');
     if (!toggle) return;
@@ -696,6 +737,26 @@ $('#tbody-usuarios').addEventListener('change', async (e) => {
     await cargarTodo();
 });
 $('#tbody-usuarios').addEventListener('click', async (e) => {
+    const editar = e.target.closest('[data-editar-usuario]');
+    if (editar) { abrirModalEditarUsuario(usuarios.find((u) => u.correo === editar.dataset.editarUsuario)); return; }
+
+    const resetear = e.target.closest('[data-resetear-usuario]');
+    if (resetear) {
+        const correo = resetear.dataset.resetearUsuario;
+        if (!confirm(`¿Generar una clave temporal nueva para "${correo}"? La clave actual deja de funcionar.`)) return;
+        resetear.disabled = true;
+        const { data, error } = await supabase.functions.invoke('resetear-clave', { body: { correo } });
+        resetear.disabled = false;
+        if (error || data?.error) { toast('No se pudo resetear: ' + (data?.error || error.message), 'error'); return; }
+        if (data.email_enviado === false) {
+            toast(`Clave temporal de "${correo}": ${data.password_temporal} (no se pudo mandar el correo, pasásela a mano)`, 'error');
+        } else {
+            toast(`Clave temporal generada y enviada a "${correo}".`);
+        }
+        await cargarTodo();
+        return;
+    }
+
     const borrar = e.target.closest('[data-borrar-usuario]');
     if (!borrar) return;
     const correo = borrar.dataset.borrarUsuario;

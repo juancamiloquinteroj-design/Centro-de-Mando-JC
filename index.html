@@ -309,6 +309,42 @@
     </div>
 </div>
 
+<!-- ==================== MODAL: editar datos de usuario ==================== -->
+<div id="modal-editar-usuario" class="modal oculto">
+    <div class="modal-card">
+        <h3>Editar datos</h3>
+        <label class="campo">
+            <span>Correo</span>
+            <input type="email" id="eu-correo" disabled>
+        </label>
+        <label class="campo">
+            <span>Nombre completo</span>
+            <input type="text" id="eu-nombre" placeholder="Nombre y apellidos">
+        </label>
+        <label class="campo">
+            <span>Cédula</span>
+            <input type="text" id="eu-cedula" placeholder="Número de cédula">
+        </label>
+        <label class="campo">
+            <span>Empresa</span>
+            <input type="text" id="eu-empresa" placeholder="Empresa a la que pertenece">
+        </label>
+        <label class="campo">
+            <span>Celular</span>
+            <input type="tel" id="eu-celular" placeholder="300 000 0000">
+        </label>
+        <p class="modal-sub">La empresa determina, entre otras cosas, a qué operador ve esta persona en el Visualizador de Datos.</p>
+        <div class="modal-actions">
+            <button id="eu-cancelar" class="btn-secundario">Cancelar</button>
+            <button id="eu-confirmar" class="btn-primario">
+                <span class="btn-texto">Guardar cambios</span>
+                <span class="btn-spinner"></span>
+            </button>
+        </div>
+        <p class="modal-msg" id="eu-msg"></p>
+    </div>
+</div>
+
 <!-- ==================== MODAL: enlace de descarga ==================== -->
 <div id="modal-enlace" class="modal oculto">
     <div class="modal-card">

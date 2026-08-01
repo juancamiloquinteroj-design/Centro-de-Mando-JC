@@ -151,6 +151,7 @@ function armarCorreoBienvenida(correo: string, password: string, nombre: string,
               <td style="vertical-align:middle;padding-left:14px;">
                 <div style="color:#1a1a1a;font-size:16px;font-weight:bold;">CINCO S.A.S.</div>
                 <div style="color:#999;font-size:11px;">Sistema automatizado</div>
+                <div style="color:#bbb;font-size:9.5px;">Construcción, Ingeniería y Consultoría</div>
               </td>
             </tr></table>
           </td>
